@@ -10,7 +10,7 @@
 
 #define MAX_INPUT_LENGTH 100  
 #define CRYPTO_BYTES 64   // Size of hash
-#define CHUNK_SIZE 32768
+#define CHUNK_SIZE 2048
 
 char userInput[MAX_INPUT_LENGTH];  
 int buffer_index = 0;  
@@ -67,6 +67,9 @@ void hash_file(fs::File file) {
   char unsigned chunkhash[CRYPTO_BYTES];
   char unsigned combinedhash[CRYPTO_BYTES*2];
   char unsigned finalhash[CRYPTO_BYTES];
+  memset(chunkhash, 0, CRYPTO_BYTES);
+  memset(combinedhash, 0, CRYPTO_BYTES*2);
+  memset(finalhash, 0, CRYPTO_BYTES);
   size_t file_size = file.size();
   size_t file_hashed = 0;
   size_t loop = 0;
@@ -82,13 +85,13 @@ void hash_file(fs::File file) {
     }
     file.readBytes(curr_chunk, size_to_read);
     if (file_hashed == 0){
-      hash_file_contents(finalhash,curr_chunk);
+      hash_file_contents(finalhash,curr_chunk, CRYPTO_BYTES);
     }
     else{
-      hash_file_contents(chunkhash, curr_chunk);
+      hash_file_contents(chunkhash, curr_chunk, CRYPTO_BYTES);
       memcpy(combinedhash, finalhash, CRYPTO_BYTES);
       memcpy(combinedhash + CRYPTO_BYTES, chunkhash, CRYPTO_BYTES);
-      hash_file_contents(finalhash, (char *)combinedhash);
+      hash_file_contents(finalhash, (char *)combinedhash, CRYPTO_BYTES*2);
     }
     file_hashed += size_to_read;
     loop+=1;
@@ -105,9 +108,9 @@ void hash_file(fs::File file) {
   file.close();
 }
 
-void hash_file_contents(char unsigned* out, char * file_contents){
+void hash_file_contents(char unsigned* out, char * file_contents, size_t length){
   unsigned const char * input_to_hash = (unsigned const char *)file_contents;
-  int test = crypto_hash(out, input_to_hash, strlen((const char *)input_to_hash));
+  int test = crypto_hash(out, input_to_hash, length);
   return;
 }
 
@@ -147,7 +150,7 @@ void setup() {
   Serial.printf("SD Card Size: %lluMB\n", cardSize);
   
   listDir(SD, "/", 0);
-  readFile(SD, "/excel.csv");
+  readFile(SD, "/zip.zip");
 }
 
 void loop() {
