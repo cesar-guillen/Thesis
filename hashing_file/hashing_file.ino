@@ -8,71 +8,21 @@
 #include "SD.h"
 #include "SPI.h"
 
-#define MAX_INPUT_LENGTH 100  
 #define CRYPTO_BYTES 64   // Size of hash
 #define CHUNK_SIZE 2048
 
-char userInput[MAX_INPUT_LENGTH];  
-int buffer_index = 0;  
-
-void listDir(fs::FS &fs, const char *dirname, uint8_t levels) {
-    Serial.printf("Listing directory: %s\n", dirname);
-  
-    File root = fs.open(dirname);
-    if (!root) {
-      Serial.println("Failed to open directory");
-      return;
-    }
-    if (!root.isDirectory()) {
-      Serial.println("Not a directory");
-      return;
-    }
-  
-    File file = root.openNextFile();
-    while (file) {
-      if (file.isDirectory()) {
-        Serial.print("  DIR : ");
-        Serial.println(file.name());
-        if (levels) {
-          listDir(fs, file.path(), levels - 1);
-        }
-      } else {
-        Serial.print("  FILE: ");
-        Serial.print(file.name());
-        Serial.print("  SIZE: ");
-        Serial.println(file.size());
-      }
-      file = root.openNextFile();
-    }
-}
-
-void readFile(fs::FS &fs, const char *path) {
-  Serial.printf("Reading file: %s\n", path);
-  
+void hash_file(fs::FS &fs, const char *path) {
+  Serial.printf("Hashing file contents of %s ... \n", path);
   File file = fs.open(path);
-  if (!file) {
-    Serial.println("Failed to open file for reading");
-    return;
-  }
-  hash_file(file);
-  file.close();
-}
-  
-void hash_file(fs::File file) {
   if (!file) {
     Serial.println("Failed to open file");
     return;
   }
-  file.seek(0);
-  char unsigned chunkhash[CRYPTO_BYTES];
-  char unsigned combinedhash[CRYPTO_BYTES*2];
-  char unsigned finalhash[CRYPTO_BYTES];
-  memset(chunkhash, 0, CRYPTO_BYTES);
-  memset(combinedhash, 0, CRYPTO_BYTES*2);
-  memset(finalhash, 0, CRYPTO_BYTES);
+  char unsigned chunkhash[CRYPTO_BYTES] = { 0 };
+  char unsigned combinedhash[CRYPTO_BYTES*2] = { 0 };
+  char unsigned finalhash[CRYPTO_BYTES] = { 0 };
   size_t file_size = file.size();
   size_t file_hashed = 0;
-  size_t loop = 0;
   unsigned long start_time = millis();
   while (file_hashed < file_size)
   {
@@ -94,18 +44,22 @@ void hash_file(fs::File file) {
       hash_file_contents(finalhash, (char *)combinedhash, CRYPTO_BYTES*2);
     }
     file_hashed += size_to_read;
-    loop+=1;
-    //Serial.printf("In iteration:%d , read: %d out of %d\n", loop, file_hashed, file_size);
     free(curr_chunk);
   }
   unsigned long end_time = millis();
-  Serial.printf("Hashing process completed in %lu milliseconds\n", end_time - start_time);
+  unsigned long total_time = end_time - start_time;
+  print_hash_output(total_time, finalhash);
+  file.close();
+  return;
+}
+
+void print_hash_output(unsigned long time, char unsigned * finalhash){
+  Serial.printf("Hashing process completed in %lu milliseconds\n", time);
   Serial.print("final output: ");
   for (int i = 0; i < CRYPTO_BYTES; i++) {
     Serial.printf("%02X", finalhash[i]);  
   }
   Serial.println();
-  file.close();
 }
 
 void hash_file_contents(char unsigned* out, char * file_contents, size_t length){
@@ -128,29 +82,10 @@ void setup() {
     Serial.println("Card Mount Failed");
     return;
   }
-  uint8_t cardType = SD.cardType();
-  
-  if (cardType == CARD_NONE) {
-    Serial.println("No SD card attached");
-    return;
-  }
-  
-  Serial.print("SD Card Type: ");
-  if (cardType == CARD_MMC) {
-    Serial.println("MMC");
-  } else if (cardType == CARD_SD) {
-    Serial.println("SDSC");
-  } else if (cardType == CARD_SDHC) {
-    Serial.println("SDHC");
-  } else {
-    Serial.println("UNKNOWN");
-  }
-  
-  uint64_t cardSize = SD.cardSize() / (1024 * 1024);
-  Serial.printf("SD Card Size: %lluMB\n", cardSize);
-  
+
   listDir(SD, "/", 0);
-  readFile(SD, "/zip.zip");
+  readFile(SD, "/test.txt");
+  hash_file(SD, "/zip.zip");
 }
 
 void loop() {
