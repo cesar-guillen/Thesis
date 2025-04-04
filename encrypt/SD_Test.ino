@@ -133,19 +133,22 @@ void writeFile(fs::FS &fs, const char *path, const char *message) {
   file.close();
 }
 
-void appendFile(fs::FS &fs, const char *path, const char *message) {
-  Serial.printf("Appending to file: %s\n", path);
+void appendFile(fs::FS &fs, const char *path, const char *message, size_t len) {
+  //Serial.printf("Appending %d bytes to file: %s\n", len, path);
 
   File file = fs.open(path, FILE_APPEND);
   if (!file) {
     Serial.println("Failed to open file for appending");
     return;
   }
-  if (file.printf(message)) {
-    Serial.println("Message appended");
+
+  size_t written = file.write((const uint8_t*)message, len);
+  if (written == len) {
+    //Serial.println("Message appended successfully");
   } else {
-    Serial.println("Append failed");
+    Serial.printf("Append failed, wrote only %d bytes\n", written);
   }
+
   file.close();
 }
 
