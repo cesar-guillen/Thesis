@@ -13,7 +13,7 @@
 #include "FS.h"
 #include "SD.h"
 #include "SPI.h"
-#define CHUNK_SIZE 1
+#define CHUNK_SIZE 8192
 
 unsigned char npub[CRYPTO_NPUBBYTES] = {0}; //nonce
 unsigned char k[CRYPTO_KEYBYTES] = {0};     //key
@@ -27,19 +27,19 @@ int encrypt_chunk(char* plaintext, char* cyphertext, unsigned long long *clen, s
   return enc_success;
 }
 
-int decrypt_chunk(char *ciphertext,size_t clen ,char *plaintext, unsigned long long * decrypted_mlen){
+long long unsigned int decrypt_chunk(char *ciphertext,size_t clen ,char *plaintext, unsigned long long * decrypted_mlen){
   unsigned char ad[] = "";  // Optional associated data
   unsigned long long adlen = strlen((char*)ad);
   int decrypt_status = crypto_aead_decrypt((unsigned char*)plaintext, decrypted_mlen, NULL, (const unsigned char*)ciphertext, clen, ad, adlen, npub, k);
   if (decrypt_status == 0) {
-      plaintext[*decrypted_mlen] = '\0';
-      Serial.printf("Decrypted output: %s\n", plaintext);
+      //plaintext[*decrypted_mlen] = '\0';
+      //Serial.printf("Decrypted output: %s\n", plaintext);
   } else {
       Serial.println("Decryption failed!");
       return -1;
   }
   
-  return 0;
+  return *decrypted_mlen;
 }
 
 void print_hex(const unsigned char* data, size_t len) {
@@ -82,9 +82,9 @@ void encrypt_file(fs::FS &fs, const char *path){
     }
     //print_hex((unsigned char*)encrypted_chunk, clen);
     unsigned long long decrypted_mlen;
-    char * plaintext = (char *)malloc(CHUNK_SIZE + 1);
-    decrypt_chunk(encrypted_chunk, clen, plaintext, &decrypted_mlen);
-    appendFile(fs, "/test2.txt", plaintext);
+    char * plaintext = (char *)malloc(CHUNK_SIZE);
+    long long unsigned int mlen = decrypt_chunk(encrypted_chunk, clen, plaintext, &decrypted_mlen);
+    appendFile(fs, "/zip4.zip", plaintext, mlen);
     file_encrypted += size_to_read;
     free(curr_chunk);
     free(encrypted_chunk);
@@ -110,13 +110,13 @@ void setup() {
     return;
   }
   listDir(SD, "/", 0);
-  readFile(SD, "/test.txt");
-  deleteFile(SD, "/test2.txt");
-  readFile(SD, "/test2.txt"); 
-  encrypt_file(SD, "/test.txt");
-  readFile(SD, "/test2.txt");
-  hash_file(SD, "/test.txt");
-  hash_file(SD, "/test2.txt");
+  //readFile(SD, "/zip.zip");
+  deleteFile(SD, "/zip4.zip");
+  //readFile(SD, "/zip4.zip"); 
+  encrypt_file(SD, "/zip.zip");
+  //readFile(SD, "/zip4.zip");
+  hash_file(SD, "/zip.zip");
+  hash_file(SD, "/zip4.zip");
 }
 
 void loop() {
