@@ -3,11 +3,10 @@
 const char* ssid = "esp";
 const char* password = "MyWifiZone123!";
 
-// Server config
 WiFiServer server(5000);
 
 // Client config
-const char* remoteIP = "192.168.244.196"; // change this to another ESP32's IP or this ESP32's IP for testing
+const char* remoteIP = "192.168.244.196"; //other client's IP
 const uint16_t remotePort = 5000;
 
 // Task handles
@@ -45,7 +44,6 @@ int parse_input(String msg) {
   return -1;
 }
 
-// Server task
 void serverTask(void* parameter) {
   server.begin();
   Serial.println("[Server] Started on port 5000");
@@ -67,7 +65,7 @@ void serverTask(void* parameter) {
       client.stop();
       Serial.println("[Server] Client disconnected");
     }
-    delay(10); // avoid watchdog timeout
+    delay(100); 
   }
 }
 
@@ -92,7 +90,7 @@ void clientTask(void* parameter) {
 
     if (Serial.available()) {
       String input = Serial.readStringUntil('\n');
-      input.trim(); // Remove newline/extra whitespace
+      input.trim(); 
 
       if (input.length() > 0) {
         Serial.print("[Client] Sending message: ");
@@ -100,7 +98,7 @@ void clientTask(void* parameter) {
         persistentClient.println(input);  // Send message
       }
     }
-    delay(100);  // Wait 10 seconds between sends
+    delay(100);
   }
 }
 
@@ -118,11 +116,10 @@ void setup() {
   Serial.println("\nWiFi connected. IP address: ");
   Serial.println(WiFi.localIP());
 
-  // Start tasks
+  // Start tasks on differnt cores
   xTaskCreatePinnedToCore(serverTask,"Server Task",8192,NULL,1,&serverTaskHandle,0);
   xTaskCreatePinnedToCore(clientTask,"Client Task",8192,NULL,1,&clientTaskHandle,1);
 }
 
 void loop() {
-  // Nothing here; tasks handle everything
 }
