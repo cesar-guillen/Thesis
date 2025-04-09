@@ -1,12 +1,31 @@
 #include <WiFi.h>
+#include <ASCON.h>
+#include "FS.h"
+#include "SD.h"
+#include "SPI.h"
+#include <stdio.h>
+#include <string.h>
+#include "../ascon-suite-master/apps/asconcrypt/fileops.h"
+#include "../ascon-suite-master/apps/asconcrypt/readpass.h"
+#include "../ascon-suite-master/apps/asconcrypt/readpass.c"
+#include "../ascon-suite-master/apps/asconcrypt/fileops.c"
+#include "../ascon-suite-master/apps/asconcrypt/asconcrypt.c"
+extern "C" {
+  #include "esp_task_wdt.h"
+}
 
 const char* ssid = "esp";
-const char* password = "MyWifiZone123!";
+const char* password = "";
 
+// Server config
 WiFiServer server(5000);
 
-// Client config
-const char* remoteIP = "192.168.244.196"; //other client's IP
+#define CRYPTO_BYTES 64
+#define METADATA_HASH (sizeof(size_t) + 1 + CRYPTO_BYTES)
+#define METADATA (sizeof(size_t) + 1) // This includes the size of the cyphertext chunk and a bit singaling if the hash should be read
+
+//const char* remoteIP = "192.168.244.201"; // red
+const char* remoteIP = "192.168.244.196"; // white
 const uint16_t remotePort = 5000;
 
 // Task handles
@@ -24,7 +43,31 @@ String get_file_name(String msg) {
   if (secondSpace != -1) {
     return secondWord.substring(0, secondSpace);
   }
-  return secondWord;
+  return "/" + secondWord;
+}
+
+void send_file(String file_name){
+  if (!SD.begin()) {
+    Serial.println("Card Mount Failed");
+    return;
+  }
+
+  char unsigned finalhash[CRYPTO_BYTES] = { 0 };
+  char unsigned compare[CRYPTO_BYTES] = { 0 };
+
+  String encrypted_filed_name = file_name + ".ascon";
+  Serial.printf("Encrypting file: %s\n", file_name);
+  encrypt_file(file_name.c_str(), &SD, encrypted_filed_name.c_str());
+  Serial.printf("Decrypting file: %s\n", encrypted_filed_name);
+  decrypt_file(encrypted_filed_name.c_str(), &SD, "/decrypted.txt");
+
+  hash_file(SD, "/decrypted.txt", compare);
+  hash_file(SD, file_name.c_str(), finalhash);
+  Serial.printf("Comparing hashes ...\n");
+  print_hash_output(4, finalhash);
+  print_hash_output(4, compare);
+
+  listDir(SD, "/", 1);
 }
 
 int parse_input(String msg) {
@@ -37,6 +80,7 @@ int parse_input(String msg) {
       return -1;
     }
     Serial.printf("File name is: %s\n", file_name);
+    send_file(file_name);
     return 0;
   }
 
@@ -44,6 +88,7 @@ int parse_input(String msg) {
   return -1;
 }
 
+// Server task
 void serverTask(void* parameter) {
   server.begin();
   Serial.println("[Server] Started on port 5000");
@@ -65,12 +110,11 @@ void serverTask(void* parameter) {
       client.stop();
       Serial.println("[Server] Client disconnected");
     }
-    delay(100); 
+    delay(10); // avoid watchdog timeout
   }
 }
 
-// Client task
-// Global so we can reuse across loop
+
 WiFiClient persistentClient;
 
 void clientTask(void* parameter) {
@@ -90,22 +134,22 @@ void clientTask(void* parameter) {
 
     if (Serial.available()) {
       String input = Serial.readStringUntil('\n');
-      input.trim(); 
+      input.trim(); // Remove newline/extra whitespace
 
       if (input.length() > 0) {
         Serial.print("[Client] Sending message: ");
         Serial.println(input);
-        persistentClient.println(input);  // Send message
+        persistentClient.println(input); 
       }
     }
-    delay(100);
+    delay(100); 
   }
 }
 
 
 void setup() {
   Serial.begin(115200);
-
+  esp_task_wdt_deinit(); // watchdog cries without this. It believes funcitons get stuck when they do a lot of computing power.
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
   while (WiFi.status() != WL_CONNECTED) {
@@ -116,10 +160,11 @@ void setup() {
   Serial.println("\nWiFi connected. IP address: ");
   Serial.println(WiFi.localIP());
 
-  // Start tasks on differnt cores
-  xTaskCreatePinnedToCore(serverTask,"Server Task",8192,NULL,1,&serverTaskHandle,0);
-  xTaskCreatePinnedToCore(clientTask,"Client Task",8192,NULL,1,&clientTaskHandle,1);
+  // Start tasks
+  xTaskCreatePinnedToCore(serverTask,"Server Task",16384,NULL,1,&serverTaskHandle,1);
+  xTaskCreatePinnedToCore(clientTask,"Client Task",8192,NULL,1,&clientTaskHandle,0);
 }
 
 void loop() {
+  // Nothing here; tasks handle everything
 }
