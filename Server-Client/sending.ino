@@ -1,34 +1,41 @@
 #define CHUNK_SIZE 512
 
-void send_request(String input){
+void send_request(String input) {
   Serial.print("[Client] Sending message: ");
   Serial.println(input);
 
-  const char* msg = input.c_str();
+  char* msg = (char*)input.c_str();
   size_t msg_len = strlen(msg);
+  char* encrypted_msg;
+  size_t clen;
+  
+  encrypt_message(msg, encrypted_msg, &clen, msg_len, npub);
+  
+  size_t total_payload_size = sizeof(msg_code) + ASCON128_NONCE_SIZE + clen + 1;
+  size_t total_packet_size = sizeof(size_t) + total_payload_size;
 
-  size_t total_size = sizeof(msg_code) + msg_len + 1;
-  char* buffer = (char*)malloc(sizeof(size_t) + total_size);
+  char* buffer = (char*)malloc(total_packet_size);
   if (!buffer) {
     Serial.println("Failed to allocate memory for message");
     return;
   }
 
   size_t offset = 0;
-  memcpy(buffer + offset, &total_size, sizeof(total_size)); offset += sizeof(total_size);
+  memcpy(buffer + offset, &total_payload_size, sizeof(total_payload_size)); offset += sizeof(total_payload_size);
   memcpy(buffer + offset, &msg_code, sizeof(msg_code)); offset += sizeof(msg_code);
-  memcpy(buffer + offset, msg, msg_len); offset += msg_len;
+  memcpy(buffer + offset, npub, ASCON128_NONCE_SIZE); offset += ASCON128_NONCE_SIZE;
+  memcpy(buffer + offset, encrypted_msg, clen); offset += clen;
   buffer[offset] = '\n';
 
-  persistentClient.write((uint8_t*)buffer, sizeof(size_t) + total_size);
+  persistentClient.write((uint8_t*)buffer, total_packet_size);
   free(buffer);
-  
+  ascon_aead_increment_nonce(npub);
   requested_file_name = get_file_name(input);
   if (!SD.begin()) {
     Serial.println("Card Mount Failed");
-    free(buffer);
     return;
   }
+  deleteFile(SD, (requested_file_name + ".ascon").c_str());
 }
 
 
@@ -88,7 +95,6 @@ void send_file(fs::FS &fs, const char *encrypted_file, const char* original_file
     if (bytes_written != total_packet_size) {
       Serial.printf("Failed to write full chunk: wrote %d of %d bytes\n", bytes_written, total_packet_size);
     }
-    persistentClient.flush();
     delay(500);
     file_sent += size_to_send;
     free(buffer);

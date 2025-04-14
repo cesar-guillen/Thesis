@@ -10,6 +10,11 @@
 #include "../ascon-suite-master/apps/asconcrypt/readpass.c"
 #include "../ascon-suite-master/apps/asconcrypt/fileops.c"
 #include "../ascon-suite-master/apps/asconcrypt/asconcrypt.c"
+#define MAX_NONCES 2000
+size_t nonces_table[MAX_NONCES] = {0};
+unsigned char npub[ASCON128_NONCE_SIZE] = {0}; //nonce
+unsigned char current_nonce[ASCON128_NONCE_SIZE] = {0}; //nonce
+unsigned char k[ASCON128_KEY_SIZE] = {0};     //key
 
 extern "C" {
   #include "esp_task_wdt.h"
@@ -33,9 +38,27 @@ const uint8_t hash_code = 1;
 const uint8_t data_code = 0;
 const uint8_t msg_code = 47;
 
+
 // Task handles
 TaskHandle_t serverTaskHandle = NULL;
 TaskHandle_t clientTaskHandle = NULL;
+
+void print_nonce(const unsigned char* npub) {
+    for (int i = 0; i < ASCON128_NONCE_SIZE; i++) {
+        if (npub[i] < 0x10) Serial.print("0");
+        Serial.print(npub[i], HEX);
+    }
+    Serial.println();
+}
+
+size_t nonce_to_integer(const unsigned char* npub){
+  size_t nonce_value = 0;
+  for (int i = 0; i < sizeof(size_t); i++) {
+    nonce_value <<= 8;
+    nonce_value |= npub[ASCON128_NONCE_SIZE - sizeof(size_t) + i];
+  }
+  return nonce_value;
+}
 
 String get_file_name(String msg) {
   msg.trim();
@@ -61,39 +84,6 @@ int check_file(fs::FS &fs, const char *path){
   return 0;
 }
 
-
-void prepare_file(String file_name){
-  if (!SD.begin()) {
-    Serial.println("Card Mount Failed");
-    return;
-  }
-  if (check_file(SD,file_name.c_str()) < 0) {
-    Serial.println("File is not found. Exiting");
-    return;
-  }
-  String encrypted_filed_name = file_name + ".ascon";
-  Serial.printf("Encrypting file %s ...\n", file_name);
-  encrypt_file(file_name.c_str(), &SD, encrypted_filed_name.c_str());
-  send_hash(SD, file_name.c_str());
-  send_file(SD, encrypted_filed_name.c_str(), file_name.c_str());
-  listDir(SD, "/", 1);
-  deleteFile(SD, encrypted_filed_name.c_str());
-}
-
-
-void decrypt_verify(String file){
-  if (!SD.begin()) {
-    Serial.println("Card Mount Failed");
-    return;
-  }
-  deleteFile(SD, requested_file_name.c_str());
-  int result = decrypt_file((requested_file_name + ".ascon").c_str(),&SD,requested_file_name.c_str());
-  //deleteFile(SD, (requested_file_name + ".ascon").c_str());
-  char unsigned  hash[CRYPTO_BYTES] = { 0 };
-  hash_file(SD, requested_file_name.c_str(), hash);
-  print_hash_output(4, hash);
-  listDir(SD, "/", 1);
-}
 
 void serverTask(void* parameter) {
   server.begin();
