@@ -34,10 +34,10 @@ void hash_file(fs::FS &fs, const char *path, char unsigned *finalhash) {
     }
     file.readBytes(curr_chunk, size_to_read);
     if (file_hashed == 0){
-      hash_file_contents(finalhash,curr_chunk, CRYPTO_BYTES);
+      hash_file_contents(finalhash,curr_chunk, size_to_read);
     }
     else{
-      hash_file_contents(chunkhash, curr_chunk, CRYPTO_BYTES);
+      hash_file_contents(chunkhash, curr_chunk, size_to_read);
       memcpy(combinedhash, finalhash, CRYPTO_BYTES);
       memcpy(combinedhash + CRYPTO_BYTES, chunkhash, CRYPTO_BYTES);
       hash_file_contents(finalhash, (char *)combinedhash, CRYPTO_BYTES*2);

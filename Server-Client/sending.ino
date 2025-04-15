@@ -1,17 +1,15 @@
 #define CHUNK_SIZE 512
-
+#define MAX_ENCRYPTED_MSG_SIZE 100
 void send_request(String input) {
   Serial.print("[Client] Sending message: ");
   Serial.println(input);
 
   char* msg = (char*)input.c_str();
   size_t msg_len = strlen(msg);
-  char* encrypted_msg;
-  size_t clen;
-  
+  char encrypted_msg[MAX_ENCRYPTED_MSG_SIZE];
+  size_t clen = 0;
   encrypt_message(msg, encrypted_msg, &clen, msg_len, npub);
-  
-  size_t total_payload_size = sizeof(msg_code) + ASCON128_NONCE_SIZE + clen + 1;
+  size_t total_payload_size = sizeof(msg_code) + ASCON128_NONCE_SIZE + clen;
   size_t total_packet_size = sizeof(size_t) + total_payload_size;
 
   char* buffer = (char*)malloc(total_packet_size);
@@ -25,9 +23,8 @@ void send_request(String input) {
   memcpy(buffer + offset, &msg_code, sizeof(msg_code)); offset += sizeof(msg_code);
   memcpy(buffer + offset, npub, ASCON128_NONCE_SIZE); offset += ASCON128_NONCE_SIZE;
   memcpy(buffer + offset, encrypted_msg, clen); offset += clen;
-  buffer[offset] = '\n';
-
   persistentClient.write((uint8_t*)buffer, total_packet_size);
+  Serial.println("before free");
   free(buffer);
   ascon_aead_increment_nonce(npub);
   requested_file_name = get_file_name(input);
@@ -95,7 +92,7 @@ void send_file(fs::FS &fs, const char *encrypted_file, const char* original_file
     if (bytes_written != total_packet_size) {
       Serial.printf("Failed to write full chunk: wrote %d of %d bytes\n", bytes_written, total_packet_size);
     }
-    delay(500);
+    delay(2000);
     file_sent += size_to_send;
     free(buffer);
   }
