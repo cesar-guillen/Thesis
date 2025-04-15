@@ -24,7 +24,6 @@ void send_request(String input) {
   memcpy(buffer + offset, npub, ASCON128_NONCE_SIZE); offset += ASCON128_NONCE_SIZE;
   memcpy(buffer + offset, encrypted_msg, clen); offset += clen;
   persistentClient.write((uint8_t*)buffer, total_packet_size);
-  Serial.println("before free");
   free(buffer);
   ascon_aead_increment_nonce(npub);
   requested_file_name = get_file_name(input);
@@ -39,7 +38,6 @@ void send_request(String input) {
 void send_hash(fs::FS &fs, const char *original_file) {
   unsigned char hash[CRYPTO_BYTES] = { 0 };
   hash_file(fs, original_file, hash);
-  print_hash_output(4, hash);
 
   size_t payload_size = sizeof(hash_code) + CRYPTO_BYTES;
   size_t total_size = sizeof(size_t) + payload_size; 
@@ -67,7 +65,7 @@ void send_file(fs::FS &fs, const char *encrypted_file, const char* original_file
 
   size_t file_size = file.size();
   size_t file_sent = 0;
-
+  Serial.println("Sending file ...");
   while (file_sent < file_size) {
     size_t size_to_send = ((file_size - file_sent) > CHUNK_SIZE ? CHUNK_SIZE : (file_size - file_sent));
     uint8_t last_chunk = (file_sent + size_to_send == file_size) ? 1 : 0;
@@ -81,7 +79,7 @@ void send_file(fs::FS &fs, const char *encrypted_file, const char* original_file
       file.close();
       return;
     }
-    Serial.printf("Sending a chunk of size: %d", total_packet_size);
+
     size_t offset = 0;
     memcpy(buffer + offset, &total_message_size, sizeof(total_message_size)); offset += sizeof(total_message_size);
     memcpy(buffer + offset, &data_code, sizeof(data_code)); offset += sizeof(data_code);
@@ -89,11 +87,14 @@ void send_file(fs::FS &fs, const char *encrypted_file, const char* original_file
     memcpy(buffer + offset, &size_to_send, sizeof(size_to_send)); offset += sizeof(size_to_send);
     file.readBytes(buffer + offset, size_to_send);
     int bytes_written = persistentClient.write((uint8_t*)buffer, total_packet_size);
+
     if (bytes_written != total_packet_size) {
       Serial.printf("Failed to write full chunk: wrote %d of %d bytes\n", bytes_written, total_packet_size);
     }
-    delay(2000);
+    delay(200);
     file_sent += size_to_send;
+    float percent = ((float)file_sent / (float)file_size) * 100.0f;
+    Serial.printf("Progress: %.2f%%\n", percent);
     free(buffer);
   }
 

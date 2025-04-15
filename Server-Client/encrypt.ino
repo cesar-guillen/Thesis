@@ -6,11 +6,17 @@ void decrypt_verify(String file){
     return;
   }
   deleteFile(SD, requested_file_name.c_str());
+  Serial.println("Decrypting file ...");
   int result = decrypt_file((requested_file_name + ".ascon").c_str(),&SD,requested_file_name.c_str());
   deleteFile(SD, (requested_file_name + ".ascon").c_str());
-  char unsigned  hash[CRYPTO_BYTES] = { 0 };
-  hash_file(SD, requested_file_name.c_str(), hash);
-  print_hash_output(4, hash);
+  char unsigned  hash_results[CRYPTO_BYTES] = { 0 };
+  hash_file(SD, requested_file_name.c_str(), hash_results);
+
+  if(!compare_hashes(hash, hash_results)){
+    Serial.println("The file recieved is not correct. Deleting file...");
+    deleteFile(SD, requested_file_name.c_str());
+  }
+  else Serial.println("Hashes match! Download was succesful.");
   listDir(SD, "/", 1);
 }
 
@@ -29,7 +35,6 @@ void prepare_file(String file_name){
   encrypt_file(file_name.c_str(), &SD, encrypted_filed_name.c_str());
   send_hash(SD, file_name.c_str());
   send_file(SD, encrypted_filed_name.c_str(), file_name.c_str());
-  listDir(SD, "/", 1);
   deleteFile(SD, encrypted_filed_name.c_str());
 }
 

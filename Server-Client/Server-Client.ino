@@ -10,11 +10,9 @@
 #include "../ascon-suite-master/apps/asconcrypt/readpass.c"
 #include "../ascon-suite-master/apps/asconcrypt/fileops.c"
 #include "../ascon-suite-master/apps/asconcrypt/asconcrypt.c"
+#define CRYPTO_BYTES 64   // Size of hash
 #define MAX_NONCES 2000
-size_t nonces_table[MAX_NONCES] = {0};
-unsigned char npub[ASCON128_NONCE_SIZE] = {0}; //nonce
-unsigned char current_nonce[ASCON128_NONCE_SIZE] = {0}; //nonce
-unsigned char k[ASCON128_KEY_SIZE] = {0};     //key
+
 
 extern "C" {
   #include "esp_task_wdt.h"
@@ -24,9 +22,7 @@ extern "C" {
 const char* ssid = "esp";
 const char* password = "MyWifiZone123!";
 WiFiServer server(5000);
-#define CRYPTO_BYTES 64
 WiFiClient persistentClient;
-
 //const char* remoteIP = "192.168.244.201"; // red
 const char* remoteIP = "192.168.244.196"; // white
 const uint16_t remotePort = 5000;
@@ -37,7 +33,10 @@ String requested_file_name = "";
 const uint8_t hash_code = 1;
 const uint8_t data_code = 0;
 const uint8_t msg_code = 47;
-
+size_t nonces_table[MAX_NONCES] = {0};
+unsigned char npub[ASCON128_NONCE_SIZE] = {0};
+unsigned char current_nonce[ASCON128_NONCE_SIZE] = {0};
+unsigned char k[ASCON128_KEY_SIZE] = {0};     //key
 
 // Task handles
 TaskHandle_t serverTaskHandle = NULL;
@@ -133,7 +132,7 @@ void clientTask(void* parameter) {
 
 void setup() {
   Serial.begin(115200);
-  esp_task_wdt_deinit(); // watchdog cries without this. It believes funcitons get stuck when they do a lot of computing power.
+  esp_task_wdt_deinit(); // watchdog cries without this. It believes funcitons get stuck when they do a lot of computing.
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
   while (WiFi.status() != WL_CONNECTED) {

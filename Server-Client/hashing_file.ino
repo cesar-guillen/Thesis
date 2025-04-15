@@ -7,8 +7,6 @@
 #include "FS.h"
 #include "SD.h"
 #include "SPI.h"
-
-#define CRYPTO_BYTES 64   // Size of hash
 #define CHUNK_SIZE 2048
 
 void hash_file(fs::FS &fs, const char *path, char unsigned *finalhash) {
@@ -47,9 +45,12 @@ void hash_file(fs::FS &fs, const char *path, char unsigned *finalhash) {
   }
   unsigned long end_time = millis();
   unsigned long total_time = end_time - start_time;
-  //print_hash_output(total_time, finalhash);
   file.close();
   return;
+}
+
+int compare_hashes(const unsigned char *first, const unsigned char *second) {
+  return memcmp(first, second, CRYPTO_BYTES) == 0;
 }
 
 void print_hash_output(unsigned long time, char unsigned * finalhash){

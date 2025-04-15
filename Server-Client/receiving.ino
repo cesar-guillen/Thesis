@@ -6,7 +6,6 @@ void receive_hash(size_t msg_length, uint8_t* buffer){
     return;
   }
   memcpy(hash, buffer + 1, CRYPTO_BYTES);
-  print_hash_output(4, hash);
 }
 
 void recieve_encrypted_chunk(size_t msg_length, uint8_t *buffer){
@@ -32,10 +31,9 @@ void recieve_encrypted_chunk(size_t msg_length, uint8_t *buffer){
     free(buffer);
     return;
   }
-  Serial.printf("DATA received, reading it into %s.ascon ...\n", requested_file_name);
+  Serial.printf("%d bytes received, reading it into %s.ascon ...\n",chunk_size, requested_file_name);
   appendFile(SD, (requested_file_name + ".ascon").c_str(), (const char*)(buffer + 2 + sizeof(size_t)), chunk_size);
   if (last_chunk){
-    Serial.println("LAST CHUNK IS RECEIVED!");
     decrypt_verify(requested_file_name + ".ascon");
   }
   return; 
@@ -96,7 +94,6 @@ void parse_input(size_t msg_length ,WiFiClient& client){
   }
   client.readBytes((char*)buffer, msg_length);
   uint8_t msg_type = buffer[0]; // the metadata contains what message type it is
-  Serial.printf("Finished parsing message of type: %u\n", msg_type);
 
   switch (msg_type) {
     case hash_code:
@@ -136,13 +133,11 @@ void recieve_input(WiFiClient& client) {
 
 int parse_request(String msg) {
   if (msg.startsWith("/GET")) {
-    Serial.println("Command recognized: GET");
     String file_name = get_file_name(msg);
     if (file_name == "") {
       Serial.printf("File name could not be retrieved\n");
       return -1;
     }
-    Serial.printf("File name is: %s\n", file_name);
     prepare_file(file_name);
     return 0;
   }
