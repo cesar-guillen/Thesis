@@ -1,17 +1,36 @@
 
-void receive_hash(size_t msg_length, uint8_t* buffer){
-  if (msg_length != sizeof(uint8_t) + CRYPTO_BYTES) {
+void receive_hash(size_t msg_length, uint8_t* buffer) {
+  if (msg_length < 1 + ASCON128_NONCE_SIZE) {
     Serial.println("Invalid hash message size");
-    free(buffer);
     return;
   }
-  memcpy(hash, buffer + 1, CRYPTO_BYTES);
+
+  memcpy(current_nonce, buffer + 1, ASCON128_NONCE_SIZE);
+  size_t nonce_int = nonce_to_integer(current_nonce);
+  if (validate_nonce(nonce_int) == -1) {
+    return;
+  }
+
+  size_t clen = msg_length - 1 - ASCON128_NONCE_SIZE;
+  const char* encrypted_hash = (const char*)(buffer + 1 + ASCON128_NONCE_SIZE);
+
+  char decrypted_hash[CRYPTO_BYTES] = {0};
+  size_t decrypted_len = 0;
+
+  int result = decrypt_message((char*)encrypted_hash, clen, decrypted_hash, &decrypted_len, current_nonce);
+  if (result < 0) {
+    Serial.println("Decryption failed in receive_hash()");
+    return;
+  }
+
+  memcpy(hash, decrypted_hash, CRYPTO_BYTES);
+  return;
 }
+
 
 void recieve_encrypted_chunk(size_t msg_length, uint8_t *buffer){
   if (msg_length < sizeof(uint8_t) + sizeof(size_t) + 1) {
     Serial.println("Invalid data message size");
-    free(buffer);
     return;
   }
 
@@ -22,13 +41,11 @@ void recieve_encrypted_chunk(size_t msg_length, uint8_t *buffer){
 
   if (msg_length != sizeof(uint8_t) + sizeof(uint8_t) + sizeof(size_t) + chunk_size) {
     Serial.println("Invalid chunk payload size");
-    free(buffer);
     return;
   }
 
   if (!SD.begin()) {
     Serial.println("Card Mount Failed");
-    free(buffer);
     return;
   }
   Serial.printf("%d bytes received, reading it into %s.ascon ...\n",chunk_size, requested_file_name);
@@ -74,8 +91,6 @@ void recieve_request(size_t msg_length, uint8_t* buffer) {
   memcpy(current_nonce, buffer + 1, ASCON128_NONCE_SIZE);
   size_t nonce_int = nonce_to_integer(current_nonce);
   if (validate_nonce(nonce_int) == -1) return;
-
-  Serial.printf("Received nonce is: %d\n", nonce_int);
 
   size_t msg_content_length = msg_length - 1 - ASCON128_NONCE_SIZE;
   const char* encrypted_msg = (const char*)(buffer + 1 + ASCON128_NONCE_SIZE);

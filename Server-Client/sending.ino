@@ -1,5 +1,6 @@
 #define CHUNK_SIZE 512
 #define MAX_ENCRYPTED_MSG_SIZE 100
+
 void send_request(String input) {
   Serial.print("[Client] Sending message: ");
   Serial.println(input);
@@ -38,22 +39,33 @@ void send_request(String input) {
 void send_hash(fs::FS &fs, const char *original_file) {
   unsigned char hash[CRYPTO_BYTES] = { 0 };
   hash_file(fs, original_file, hash);
+  print_hash_output(4, hash);
+  // Encrypt the hash
+  char encrypted_hash[MAX_ENCRYPTED_MSG_SIZE] = { 0 };
+  size_t clen = 0;
+  encrypt_message((char*)hash, encrypted_hash, &clen, CRYPTO_BYTES, npub);
 
-  size_t payload_size = sizeof(hash_code) + CRYPTO_BYTES;
-  size_t total_size = sizeof(size_t) + payload_size; 
+  size_t payload_size = sizeof(hash_code) + ASCON128_NONCE_SIZE + clen;
+  size_t total_size = sizeof(size_t) + payload_size;
 
   uint8_t *payload = (uint8_t *)malloc(total_size);
   if (payload == nullptr) {
     Serial.println("Memory allocation failed");
     return;
   }
+
   size_t offset = 0;
   memcpy(payload + offset, &payload_size, sizeof(payload_size)); offset += sizeof(payload_size);
   memcpy(payload + offset, &hash_code, sizeof(hash_code)); offset += sizeof(hash_code);
-  memcpy(payload + offset, hash, CRYPTO_BYTES);
+  memcpy(payload + offset, npub, ASCON128_NONCE_SIZE); offset += ASCON128_NONCE_SIZE;
+  memcpy(payload + offset, encrypted_hash, clen); offset += clen;
+
   persistentClient.write(payload, total_size);
   free(payload);
+
+  ascon_aead_increment_nonce(npub);
 }
+
 
 
 void send_file(fs::FS &fs, const char *encrypted_file, const char* original_file) {
@@ -91,7 +103,7 @@ void send_file(fs::FS &fs, const char *encrypted_file, const char* original_file
     if (bytes_written != total_packet_size) {
       Serial.printf("Failed to write full chunk: wrote %d of %d bytes\n", bytes_written, total_packet_size);
     }
-    delay(200);
+    delay(200); //delay to not overwhelm the client
     file_sent += size_to_send;
     float percent = ((float)file_sent / (float)file_size) * 100.0f;
     Serial.printf("Progress: %.2f%%\n", percent);
