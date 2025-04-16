@@ -10,13 +10,12 @@
 #include "../ascon-suite-master/apps/asconcrypt/readpass.c"
 #include "../ascon-suite-master/apps/asconcrypt/fileops.c"
 #include "../ascon-suite-master/apps/asconcrypt/asconcrypt.c"
-#define CRYPTO_BYTES 64   // Size of hash
-#define MAX_NONCES 2000
-
-
 extern "C" {
   #include "esp_task_wdt.h"
 }
+
+#define CRYPTO_BYTES 64   // Size of hash
+#define MAX_NONCES 2000
 
 // Server config
 const char* ssid = "esp";
