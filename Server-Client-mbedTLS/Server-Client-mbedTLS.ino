@@ -14,7 +14,7 @@ extern "C" {
   #include "esp_task_wdt.h"
 }
 
-#define CRYPTO_BYTES 64   // Size of hash
+#define HASH_SIZE 32
 #define MAX_NONCES 2000
 
 // Server config
@@ -27,7 +27,7 @@ const char* remoteIP = "192.168.244.196"; // white
 const uint16_t remotePort = 5000;
 
 // global variables
-char unsigned  hash[CRYPTO_BYTES] = { 0 };
+char unsigned  hash[HASH_SIZE] = { 0 };
 String requested_file_name = "";
 const uint8_t hash_code = 1;
 const uint8_t data_code = 0;

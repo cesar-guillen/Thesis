@@ -1,6 +1,6 @@
 #define CHUNK_SIZE 512
 #define MAX_ENCRYPTED_MSG_SIZE 100
-
+#define HASH_SIZE 32
 void send_request(String input) {
   Serial.print("[Client] Sending message: ");
   Serial.println(input);
@@ -37,13 +37,13 @@ void send_request(String input) {
 
 
 void send_hash(fs::FS &fs, const char *original_file) {
-  unsigned char hash[CRYPTO_BYTES] = { 0 };
+  unsigned char hash[HASH_SIZE] = { 0 };
   hash_file(fs, original_file, hash);
   print_hash_output(4, hash);
   // Encrypt the hash
   char encrypted_hash[MAX_ENCRYPTED_MSG_SIZE] = { 0 };
   size_t clen = 0;
-  encrypt_message((char*)hash, encrypted_hash, &clen, CRYPTO_BYTES, npub);
+  encrypt_message((char*)hash, encrypted_hash, &clen, HASH_SIZE, npub);
 
   size_t payload_size = sizeof(hash_code) + ASCON128_NONCE_SIZE + clen;
   size_t total_size = sizeof(size_t) + payload_size;
