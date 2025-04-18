@@ -14,7 +14,7 @@ void receive_hash(size_t msg_length, uint8_t* buffer) {
   size_t clen = msg_length - 1 - ASCON128_NONCE_SIZE;
   const char* encrypted_hash = (const char*)(buffer + 1 + ASCON128_NONCE_SIZE);
 
-  char decrypted_hash[CRYPTO_BYTES] = {0};
+  char decrypted_hash[HASH_SIZE] = {0};
   size_t decrypted_len = 0;
 
   int result = decrypt_message((char*)encrypted_hash, clen, decrypted_hash, &decrypted_len, current_nonce);
@@ -23,7 +23,8 @@ void receive_hash(size_t msg_length, uint8_t* buffer) {
     return;
   }
 
-  memcpy(hash, decrypted_hash, CRYPTO_BYTES);
+  memcpy(hash, decrypted_hash, HASH_SIZE);
+  print_hash_output(4,hash);
   return;
 }
 

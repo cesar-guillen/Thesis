@@ -3,14 +3,12 @@
 #define CHUNK_SIZE 16
 #define KEY_SIZE 32    
 #define IV_SIZE 16
-#define CRYPTO_BYTES 64
-
 
 /* your 256-bit key */ 
 const uint8_t key[KEY_SIZE] = { 0 };
 const uint8_t iv[IV_SIZE] = { 0 };
-unsigned char firsthash[CRYPTO_BYTES] = {0};
-unsigned char secondhash[CRYPTO_BYTES] = {0};
+unsigned char firsthash[HASH_SIZE] = {0};
+unsigned char secondhash[HASH_SIZE] = {0};
 
 
 void encrypt_file_2(fs::FS &fs, const char *inputPath, const char *outputPath) {
@@ -100,7 +98,7 @@ void decrypt_verify(String file){
   Serial.println("Decrypting file ...");
   decrypt_file_2(SD, (requested_file_name + ".ascon").c_str(),requested_file_name.c_str());
   deleteFile(SD, (requested_file_name + ".ascon").c_str());
-  char unsigned  hash_results[CRYPTO_BYTES] = { 0 };
+  char unsigned  hash_results[HASH_SIZE] = { 0 };
   hash_file(SD, requested_file_name.c_str(), hash_results);
 
   if(!compare_hashes(hash, hash_results)){
