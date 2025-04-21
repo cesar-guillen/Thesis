@@ -1,18 +1,18 @@
 
 void receive_hash(size_t msg_length, uint8_t* buffer) {
-  if (msg_length < 1 + ASCON128_NONCE_SIZE) {
+  if (msg_length < 1 + IV_SIZE) {
     Serial.println("Invalid hash message size");
     return;
   }
 
-  memcpy(current_nonce, buffer + 1, ASCON128_NONCE_SIZE);
+  memcpy(current_nonce, buffer + 1, IV_SIZE);
   size_t nonce_int = nonce_to_integer(current_nonce);
   if (validate_nonce(nonce_int) == -1) {
     return;
   }
 
-  size_t clen = msg_length - 1 - ASCON128_NONCE_SIZE;
-  const char* encrypted_hash = (const char*)(buffer + 1 + ASCON128_NONCE_SIZE);
+  size_t clen = msg_length - 1 - IV_SIZE;
+  const char* encrypted_hash = (const char*)(buffer + 1 + IV_SIZE);
 
   char decrypted_hash[HASH_SIZE] = {0};
   size_t decrypted_len = 0;
@@ -49,7 +49,7 @@ void recieve_encrypted_chunk(size_t msg_length, uint8_t *buffer){
     Serial.println("Card Mount Failed");
     return;
   }
-  Serial.printf("%d bytes received, reading it into %s.ascon ...\n",chunk_size, requested_file_name);
+  //Serial.printf("%d bytes received, reading it into %s.ascon ...\n",chunk_size, requested_file_name);
   appendFile(SD, (requested_file_name + ".ascon").c_str(), (const char*)(buffer + 2 + sizeof(size_t)), chunk_size);
   if (last_chunk){
     decrypt_verify(requested_file_name + ".ascon");
@@ -64,10 +64,10 @@ int validate_nonce(size_t nonce){
   return 0;
 }
 
-int decrypt_request(const char* ciphertext, size_t clen, char* plaintext, const unsigned char* nonce) {
+int decrypt_request(char* ciphertext, size_t clen, char* plaintext, const unsigned char* nonce) {
   size_t decrypted_mlen = 0;
 
-  int result = decrypt_message((char*)ciphertext ,clen, plaintext, &decrypted_mlen, nonce);
+  int result = decrypt_message(ciphertext ,clen, plaintext, &decrypted_mlen, nonce);
 
   if (result < 0) {
     Serial.println("Decryption failed in decrypt_request()");
@@ -84,17 +84,17 @@ int decrypt_request(const char* ciphertext, size_t clen, char* plaintext, const 
 
 
 void recieve_request(size_t msg_length, uint8_t* buffer) {
-  if (msg_length < 1 + ASCON128_NONCE_SIZE) {
+  if (msg_length < 1 + IV_SIZE) {
     Serial.println("Invalid message length");
     return;
   }
 
-  memcpy(current_nonce, buffer + 1, ASCON128_NONCE_SIZE);
+  memcpy(current_nonce, buffer + 1, IV_SIZE);
   size_t nonce_int = nonce_to_integer(current_nonce);
   if (validate_nonce(nonce_int) == -1) return;
-
-  size_t msg_content_length = msg_length - 1 - ASCON128_NONCE_SIZE;
-  const char* encrypted_msg = (const char*)(buffer + 1 + ASCON128_NONCE_SIZE);
+  Serial.printf("nonce recieved is: %d\n", nonce_int);
+  size_t msg_content_length = msg_length - 1 - IV_SIZE;
+  char* encrypted_msg = (char*)(buffer + 1 + IV_SIZE);
 
   char decrypted_plaintext[100];
   if (decrypt_request(encrypted_msg, msg_content_length, decrypted_plaintext, (const unsigned char*)current_nonce) < 0) {

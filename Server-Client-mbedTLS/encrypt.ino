@@ -1,15 +1,11 @@
 #include "mbedtls/aes.h"
-
+#include "mbedtls/gcm.h"
 #define CHUNK_SIZE 16
-#define KEY_SIZE 32    
-#define IV_SIZE 16
-
+#define IV_SIZE_2 16
 /* your 256-bit key */ 
-const uint8_t key[KEY_SIZE] = { 0 };
-const uint8_t iv[IV_SIZE] = { 0 };
+const uint8_t iv[IV_SIZE_2] = { 0 };
 unsigned char firsthash[HASH_SIZE] = {0};
 unsigned char secondhash[HASH_SIZE] = {0};
-
 
 void encrypt_file_2(fs::FS &fs, const char *inputPath, const char *outputPath) {
   File inFile = fs.open(inputPath, "r");
@@ -31,8 +27,8 @@ void encrypt_file_2(fs::FS &fs, const char *inputPath, const char *outputPath) {
 
   uint8_t buffer[CHUNK_SIZE];
   uint8_t output[CHUNK_SIZE];
-  uint8_t iv_copy[IV_SIZE];
-  memcpy(iv_copy, iv, IV_SIZE);
+  uint8_t iv_copy[IV_SIZE_2];
+  memcpy(iv_copy, iv, IV_SIZE_2);
 
   while (inFile.available()) {
     size_t readLen = inFile.read(buffer, CHUNK_SIZE);
@@ -68,8 +64,8 @@ void decrypt_file_2(fs::FS &fs, const char *inputPath, const char *outputPath) {
 
   uint8_t buffer[CHUNK_SIZE];
   uint8_t output[CHUNK_SIZE];
-  uint8_t iv_copy[IV_SIZE];
-  memcpy(iv_copy, iv, IV_SIZE);
+  uint8_t iv_copy[IV_SIZE_2];
+  memcpy(iv_copy, iv, IV_SIZE_2);
 
   size_t totalWritten = 0;
   while (inFile.available() && totalWritten < originalSize) {
@@ -103,7 +99,7 @@ void decrypt_verify(String file){
 
   if(!compare_hashes(hash, hash_results)){
     Serial.println("The file recieved is not correct. Deleting file...");
-    deleteFile(SD, requested_file_name.c_str());
+    //deleteFile(SD, requested_file_name.c_str());
   }
   else Serial.println("Hashes match! Download was succesful.");
   listDir(SD, "/", 1);
@@ -127,24 +123,80 @@ void prepare_file(String file_name){
   deleteFile(SD, encrypted_filed_name.c_str());
 }
 
+int encrypt_message(char* plaintext, char* ciphertext, size_t* clen, size_t mlen, const unsigned char* npub) {
+    mbedtls_gcm_context gcm;
+    mbedtls_gcm_init(&gcm);
 
-int encrypt_message(char* plaintext, char* cyphertext, size_t *clen, size_t mlen, unsigned char *npub){
-  unsigned char *m = (unsigned char*)plaintext;
-  unsigned char ad[] = "";
-  unsigned long long adlen = strlen((char*)ad);
+    if (mbedtls_gcm_setkey(&gcm, MBEDTLS_CIPHER_ID_AES, key, 256) != 0) {
+        mbedtls_gcm_free(&gcm);
+        return -1;
+    }
 
-  ascon128_aead_encrypt((unsigned char*)cyphertext, clen, m, mlen, ad, adlen, (const char unsigned*)npub, k);
-  return 0;
+    unsigned char tag[16];
+    unsigned char ad[] = "";
+    size_t adlen = 0;
+
+    if (mbedtls_gcm_crypt_and_tag(&gcm, MBEDTLS_GCM_ENCRYPT, mlen,
+                                  npub, 12,
+                                  ad, adlen,
+                                  (unsigned char*)plaintext,
+                                  (unsigned char*)ciphertext,
+                                  16, tag) != 0) {
+        mbedtls_gcm_free(&gcm);
+        return -1;
+    }
+
+    // Append tag to end
+    memcpy(ciphertext + mlen, tag, 16);
+    *clen = mlen + 16;
+
+    Serial.print("Tag (enc): ");
+    for (int i = 0; i < 16; i++) Serial.printf("%02x ", tag[i]);
+    Serial.println();
+
+    mbedtls_gcm_free(&gcm);
+    return 0;
 }
 
-long long unsigned int decrypt_message(char *ciphertext,size_t clen ,char *plaintext, size_t* decrypted_mlen, const unsigned char* npub){
-  unsigned char ad[] = "";  // Optional associated data
-  unsigned long long adlen = strlen((char*)ad);
-  int decrypt_status = ascon128_aead_decrypt((unsigned char*)plaintext, decrypted_mlen, (const unsigned char*)ciphertext, clen, ad, adlen, npub, k);
-  if (decrypt_status < 0) {
-    Serial.println("Decryption failed!");
-    return -1;
-  }
-  return *decrypted_mlen;
-}
 
+int decrypt_message(char* ciphertext, size_t clen, char* plaintext, size_t* decrypted_mlen, const unsigned char* npub) {
+    if (clen < 16) return -1;
+
+    size_t ctext_len = clen - 16;
+    unsigned char tag[16];
+    memcpy(tag, ciphertext + ctext_len, 16);
+
+    unsigned char* tmp_ctext = (unsigned char*)malloc(ctext_len);
+    if (!tmp_ctext) return -1;
+    memcpy(tmp_ctext, ciphertext, ctext_len);
+
+    mbedtls_gcm_context gcm;
+    mbedtls_gcm_init(&gcm);
+
+    if (mbedtls_gcm_setkey(&gcm, MBEDTLS_CIPHER_ID_AES, key, 256) != 0) {
+        free(tmp_ctext);
+        mbedtls_gcm_free(&gcm);
+        return -1;
+    }
+
+    unsigned char ad[] = "";
+    size_t adlen = 0;
+
+    int ret = mbedtls_gcm_auth_decrypt(&gcm, ctext_len,
+                                       npub, 12,
+                                       ad, adlen,
+                                       tag, 16,
+                                       tmp_ctext,
+                                       (unsigned char*)plaintext);
+
+    free(tmp_ctext);
+    mbedtls_gcm_free(&gcm);
+
+    if (ret != 0) {
+        Serial.println("Decryption failed!");
+        return -1;
+    }
+
+    *decrypted_mlen = ctext_len;
+    return *decrypted_mlen;
+}

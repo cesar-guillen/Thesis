@@ -1,21 +1,17 @@
 #include <WiFi.h>
-#include <ASCON.h>
 #include "FS.h"
 #include "SD.h"
 #include "SPI.h"
 #include <stdio.h>
 #include <string.h>
-#include "../ascon-suite-master/apps/asconcrypt/fileops.h"
-#include "../ascon-suite-master/apps/asconcrypt/readpass.h"
-#include "../ascon-suite-master/apps/asconcrypt/readpass.c"
-#include "../ascon-suite-master/apps/asconcrypt/fileops.c"
-#include "../ascon-suite-master/apps/asconcrypt/asconcrypt.c"
+
 extern "C" {
   #include "esp_task_wdt.h"
 }
-
+#define IV_SIZE 12
 #define HASH_SIZE 32
 #define MAX_NONCES 2000
+#define KEY_SIZE 32    
 
 // Server config
 const char* ssid = "esp";
@@ -33,16 +29,17 @@ const uint8_t hash_code = 1;
 const uint8_t data_code = 0;
 const uint8_t msg_code = 47;
 size_t nonces_table[MAX_NONCES] = {0};
-unsigned char npub[ASCON128_NONCE_SIZE] = {0};
-unsigned char current_nonce[ASCON128_NONCE_SIZE] = {0};
-unsigned char k[ASCON128_KEY_SIZE] = {0};     //key
+unsigned char npub[IV_SIZE] = {0};
+unsigned char current_nonce[IV_SIZE] = {0};
+unsigned char key[KEY_SIZE] = {0};     //key
+
 
 // Task handles
 TaskHandle_t serverTaskHandle = NULL;
 TaskHandle_t clientTaskHandle = NULL;
 
 void print_nonce(const unsigned char* npub) {
-    for (int i = 0; i < ASCON128_NONCE_SIZE; i++) {
+    for (int i = 0; i < IV_SIZE; i++) {
         if (npub[i] < 0x10) Serial.print("0");
         Serial.print(npub[i], HEX);
     }
@@ -53,7 +50,7 @@ size_t nonce_to_integer(const unsigned char* npub){
   size_t nonce_value = 0;
   for (int i = 0; i < sizeof(size_t); i++) {
     nonce_value <<= 8;
-    nonce_value |= npub[ASCON128_NONCE_SIZE - sizeof(size_t) + i];
+    nonce_value |= npub[IV_SIZE - sizeof(size_t) + i];
   }
   return nonce_value;
 }
@@ -128,12 +125,12 @@ void clientTask(void* parameter) {
   }
 }
 
-
 void setup() {
   Serial.begin(115200);
   esp_task_wdt_deinit(); // watchdog cries without this. It believes funcitons get stuck when they do a lot of computing.
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
+
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");

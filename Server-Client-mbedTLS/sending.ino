@@ -10,7 +10,11 @@ void send_request(String input) {
   char encrypted_msg[MAX_ENCRYPTED_MSG_SIZE];
   size_t clen = 0;
   encrypt_message(msg, encrypted_msg, &clen, msg_len, npub);
-  size_t total_payload_size = sizeof(msg_code) + ASCON128_NONCE_SIZE + clen;
+  Serial.print("Ciphertext in receive is: ");
+  for (size_t i = 0; i < clen; i++) {
+    Serial.printf("%02x ", (unsigned char)encrypted_msg[i]);
+  }
+  Serial.println();  size_t total_payload_size = sizeof(msg_code) + IV_SIZE + clen;
   size_t total_packet_size = sizeof(size_t) + total_payload_size;
 
   char* buffer = (char*)malloc(total_packet_size);
@@ -22,11 +26,10 @@ void send_request(String input) {
   size_t offset = 0;
   memcpy(buffer + offset, &total_payload_size, sizeof(total_payload_size)); offset += sizeof(total_payload_size);
   memcpy(buffer + offset, &msg_code, sizeof(msg_code)); offset += sizeof(msg_code);
-  memcpy(buffer + offset, npub, ASCON128_NONCE_SIZE); offset += ASCON128_NONCE_SIZE;
+  memcpy(buffer + offset, npub, IV_SIZE); offset += IV_SIZE;
   memcpy(buffer + offset, encrypted_msg, clen); offset += clen;
   persistentClient.write((uint8_t*)buffer, total_packet_size);
   free(buffer);
-  ascon_aead_increment_nonce(npub);
   requested_file_name = get_file_name(input);
   if (!SD.begin()) {
     Serial.println("Card Mount Failed");
@@ -45,7 +48,7 @@ void send_hash(fs::FS &fs, const char *original_file) {
   size_t clen = 0;
   encrypt_message((char*)hash, encrypted_hash, &clen, HASH_SIZE, npub);
 
-  size_t payload_size = sizeof(hash_code) + ASCON128_NONCE_SIZE + clen;
+  size_t payload_size = sizeof(hash_code) + IV_SIZE + clen;
   size_t total_size = sizeof(size_t) + payload_size;
 
   uint8_t *payload = (uint8_t *)malloc(total_size);
@@ -57,7 +60,7 @@ void send_hash(fs::FS &fs, const char *original_file) {
   size_t offset = 0;
   memcpy(payload + offset, &payload_size, sizeof(payload_size)); offset += sizeof(payload_size);
   memcpy(payload + offset, &hash_code, sizeof(hash_code)); offset += sizeof(hash_code);
-  memcpy(payload + offset, npub, ASCON128_NONCE_SIZE); offset += ASCON128_NONCE_SIZE;
+  memcpy(payload + offset, npub, IV_SIZE); offset += IV_SIZE;
   memcpy(payload + offset, encrypted_hash, clen); offset += clen;
 
   persistentClient.write(payload, total_size);
