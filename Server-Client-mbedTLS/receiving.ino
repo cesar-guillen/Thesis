@@ -1,18 +1,18 @@
 
 void receive_hash(size_t msg_length, uint8_t* buffer) {
-  if (msg_length < 1 + IV_SIZE) {
+  if (msg_length < 1 + NONCE_SIZE) {
     Serial.println("Invalid hash message size");
     return;
   }
 
-  memcpy(current_nonce, buffer + 1, IV_SIZE);
+  memcpy(current_nonce, buffer + 1, NONCE_SIZE);
   size_t nonce_int = nonce_to_integer(current_nonce);
   if (validate_nonce(nonce_int) == -1) {
     return;
   }
 
-  size_t clen = msg_length - 1 - IV_SIZE;
-  const char* encrypted_hash = (const char*)(buffer + 1 + IV_SIZE);
+  size_t clen = msg_length - 1 - NONCE_SIZE;
+  const char* encrypted_hash = (const char*)(buffer + 1 + NONCE_SIZE);
 
   char decrypted_hash[HASH_SIZE] = {0};
   size_t decrypted_len = 0;
@@ -24,7 +24,6 @@ void receive_hash(size_t msg_length, uint8_t* buffer) {
   }
 
   memcpy(hash, decrypted_hash, HASH_SIZE);
-  print_hash_output(4,hash);
   return;
 }
 
@@ -60,7 +59,7 @@ void recieve_encrypted_chunk(size_t msg_length, uint8_t *buffer){
 int validate_nonce(size_t nonce){
   if(nonce > MAX_NONCES) return -1;
   if(nonces_table[nonce] == 1) return -1;
-  else nonces_table[nonce] == 1;
+  else nonces_table[nonce] = 1;
   return 0;
 }
 
@@ -84,17 +83,17 @@ int decrypt_request(char* ciphertext, size_t clen, char* plaintext, const unsign
 
 
 void recieve_request(size_t msg_length, uint8_t* buffer) {
-  if (msg_length < 1 + IV_SIZE) {
+  if (msg_length < 1 + NONCE_SIZE) {
     Serial.println("Invalid message length");
     return;
   }
 
-  memcpy(current_nonce, buffer + 1, IV_SIZE);
+  memcpy(current_nonce, buffer + 1, NONCE_SIZE);
   size_t nonce_int = nonce_to_integer(current_nonce);
   if (validate_nonce(nonce_int) == -1) return;
   Serial.printf("nonce recieved is: %d\n", nonce_int);
-  size_t msg_content_length = msg_length - 1 - IV_SIZE;
-  char* encrypted_msg = (char*)(buffer + 1 + IV_SIZE);
+  size_t msg_content_length = msg_length - 1 - NONCE_SIZE;
+  char* encrypted_msg = (char*)(buffer + 1 + NONCE_SIZE);
 
   char decrypted_plaintext[100];
   if (decrypt_request(encrypted_msg, msg_content_length, decrypted_plaintext, (const unsigned char*)current_nonce) < 0) {

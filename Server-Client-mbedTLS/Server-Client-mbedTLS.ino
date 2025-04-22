@@ -8,7 +8,7 @@
 extern "C" {
   #include "esp_task_wdt.h"
 }
-#define IV_SIZE 12
+#define NONCE_SIZE 12
 #define HASH_SIZE 32
 #define MAX_NONCES 2000
 #define KEY_SIZE 32    
@@ -29,8 +29,8 @@ const uint8_t hash_code = 1;
 const uint8_t data_code = 0;
 const uint8_t msg_code = 47;
 size_t nonces_table[MAX_NONCES] = {0};
-unsigned char npub[IV_SIZE] = {0};
-unsigned char current_nonce[IV_SIZE] = {0};
+unsigned char npub[NONCE_SIZE] = {0};
+unsigned char current_nonce[NONCE_SIZE] = {0};
 unsigned char key[KEY_SIZE] = {0};     //key
 
 
@@ -39,7 +39,7 @@ TaskHandle_t serverTaskHandle = NULL;
 TaskHandle_t clientTaskHandle = NULL;
 
 void print_nonce(const unsigned char* npub) {
-    for (int i = 0; i < IV_SIZE; i++) {
+    for (int i = 0; i < NONCE_SIZE; i++) {
         if (npub[i] < 0x10) Serial.print("0");
         Serial.print(npub[i], HEX);
     }
@@ -50,7 +50,7 @@ size_t nonce_to_integer(const unsigned char* npub){
   size_t nonce_value = 0;
   for (int i = 0; i < sizeof(size_t); i++) {
     nonce_value <<= 8;
-    nonce_value |= npub[IV_SIZE - sizeof(size_t) + i];
+    nonce_value |= npub[NONCE_SIZE - sizeof(size_t) + i];
   }
   return nonce_value;
 }
