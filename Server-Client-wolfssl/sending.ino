@@ -10,6 +10,9 @@ void send_request(String input) {
   char encrypted_msg[MAX_ENCRYPTED_MSG_SIZE];
   size_t clen = 0;
   encrypt_message(msg, encrypted_msg, &clen, msg_len, npub);
+  char plaintext[MAX_ENCRYPTED_MSG_SIZE];
+  size_t plaintext_len = 0;
+  if (decrypt_message(encrypted_msg, clen, plaintext, &plaintext_len, npub) < 0) Serial.println("whaaaaaaaaaat");
   size_t total_payload_size = sizeof(msg_code) + NONCE_SIZE + clen;
   size_t total_packet_size = sizeof(size_t) + total_payload_size;
 

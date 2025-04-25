@@ -1,6 +1,6 @@
-#include "mbedtls/aes.h"
-#include "mbedtls/gcm.h"
 #include <wolfssl/wolfcrypt/aes.h>
+#include <wolfssl/wolfcrypt/aes.h>
+#include <string.h>
 #define CHUNK_SIZE 16
 #define IV_SIZE 16
 
@@ -122,29 +122,37 @@ void prepare_file(String file_name){
 }
 
 int encrypt_message(char* plaintext, char* ciphertext, size_t* clen, size_t mlen, const unsigned char* npub) {
-    mbedtls_gcm_context gcm;
-    mbedtls_gcm_init(&gcm);
+    Aes aes;
+    int ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
+    if (ret != 0) return -1;
 
-    if (mbedtls_gcm_setkey(&gcm, MBEDTLS_CIPHER_ID_AES, key, 256) != 0) {
-        mbedtls_gcm_free(&gcm);
+    ret = wc_AesGcmSetKey(&aes, key, 32);
+    if (ret != 0) {
+        wc_AesFree(&aes);
         return -1;
     }
 
     unsigned char tag[16];
     unsigned char ad[] = "";
-    size_t adlen = 0;
+    word32 adlen = 0;
 
-    if (mbedtls_gcm_crypt_and_tag(&gcm, MBEDTLS_GCM_ENCRYPT, mlen, npub, 12, ad, adlen, (unsigned char*)plaintext, (unsigned char*)ciphertext, 16, tag) != 0) {
-        mbedtls_gcm_free(&gcm);
+    ret = wc_AesGcmEncrypt(&aes,
+                           (byte*)ciphertext,              
+                           (const byte*)plaintext, mlen, npub, 12, tag, 16, ad, adlen); 
+
+    if (ret != 0) {
+        wc_AesFree(&aes);
+        Serial.printf("encryption failed");
         return -1;
     }
 
     memcpy(ciphertext + mlen, tag, 16);
     *clen = mlen + 16;
 
-    mbedtls_gcm_free(&gcm);
+    wc_AesFree(&aes);
     return 0;
 }
+
 
 
 int decrypt_message(char* ciphertext, size_t clen, char* plaintext, size_t* decrypted_mlen, const unsigned char* npub) {
@@ -154,26 +162,24 @@ int decrypt_message(char* ciphertext, size_t clen, char* plaintext, size_t* decr
     unsigned char tag[16];
     memcpy(tag, ciphertext + ctext_len, 16);
 
-    unsigned char* tmp_ctext = (unsigned char*)malloc(ctext_len);
-    if (!tmp_ctext) return -1;
-    memcpy(tmp_ctext, ciphertext, ctext_len);
+    Aes aes;
+    int ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
+    if (ret != 0) return -1;
 
-    mbedtls_gcm_context gcm;
-    mbedtls_gcm_init(&gcm);
-
-    if (mbedtls_gcm_setkey(&gcm, MBEDTLS_CIPHER_ID_AES, key, 256) != 0) {
-        free(tmp_ctext);
-        mbedtls_gcm_free(&gcm);
+    ret = wc_AesGcmSetKey(&aes, key, 32);
+    if (ret != 0) {
+        wc_AesFree(&aes);
         return -1;
     }
 
     unsigned char ad[] = "";
-    size_t adlen = 0;
+    word32 adlen = 0;
 
-    int ret = mbedtls_gcm_auth_decrypt(&gcm, ctext_len, npub, 12, ad, adlen, tag, 16, tmp_ctext, (unsigned char*)plaintext);
+    ret = wc_AesGcmDecrypt(&aes,
+                           (byte*)plaintext,                
+                           (const byte*)ciphertext, ctext_len, npub, 12, tag, 16, ad, adlen);                       
 
-    free(tmp_ctext);
-    mbedtls_gcm_free(&gcm);
+    wc_AesFree(&aes);
 
     if (ret != 0) {
         Serial.println("Decryption failed!");
