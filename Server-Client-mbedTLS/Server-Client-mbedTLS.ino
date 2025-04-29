@@ -38,6 +38,16 @@ unsigned char key[KEY_SIZE] = {0};     //key
 TaskHandle_t serverTaskHandle = NULL;
 TaskHandle_t clientTaskHandle = NULL;
 
+void print_hex(const byte* data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        if (data[i] < 0x10) Serial.print("0");
+        Serial.print(data[i], HEX);
+        if (i % 16 == 15) Serial.println();
+        else Serial.print(" ");
+    }
+    Serial.println();
+}
+
 void print_nonce(const unsigned char* npub) {
     for (int i = 0; i < NONCE_SIZE; i++) {
         if (npub[i] < 0x10) Serial.print("0");
@@ -88,6 +98,9 @@ void serverTask(void* parameter) {
     WiFiClient client = server.available();
     if (client) {
       Serial.println("[Server] Client connected");
+      receive_public_key(client);
+      send_public_key(client);
+      generate_shared_secret();
       while (client.connected()) {
         if (client.available()) {
           recieve_input(client);
@@ -102,6 +115,7 @@ void serverTask(void* parameter) {
   }
 }
 
+
 void clientTask(void* parameter) {
   delay(5000);  // Wait for WiFi and server to start
 
@@ -110,13 +124,18 @@ void clientTask(void* parameter) {
       Serial.println("[Client] Connecting to remote...");
       if (persistentClient.connect(remoteIP, remotePort)) {
         Serial.println("[Client] Connected.");
+        send_public_key(persistentClient);
+        receive_public_key(persistentClient);
+        generate_shared_secret();
+        Serial.println("Generating shared key...");
+        print_hex(key, 32);
       } else {
         Serial.println("[Client] Failed to connect, retrying in 5 seconds...");
         delay(5000);
         continue;
       }
     }
-    if (Serial.available()) { // the following code reads the text from the terminal and sends it to the new client, it also appends the neccesary metadata.
+    if (Serial.available()) { 
       String input = Serial.readStringUntil('\n');
       input.trim(); 
       send_request(input);
@@ -124,13 +143,12 @@ void clientTask(void* parameter) {
     delay(100); 
   }
 }
-
 void setup() {
   Serial.begin(115200);
   esp_task_wdt_deinit(); // watchdog cries without this. It believes funcitons get stuck when they do a lot of computing.
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
-
+  generate_keypair();
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
