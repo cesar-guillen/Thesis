@@ -47,7 +47,7 @@ void hash_file(fs::FS &fs, const char *path, unsigned char *finalhash) {
 
   unsigned long end_time = millis();
   float total_time = ((float)(end_time - start_time)) / 1000.0;
-  Serial.printf("Hashing complete in %.3f seconds\n", total_time);
+  Serial.printf("Hashing complete in %.4f seconds\n", total_time);
 }
 
 

@@ -128,7 +128,6 @@ void clientTask(void* parameter) {
   }
 }
 
-
 void setup() {
   Serial.begin(115200);
   esp_task_wdt_deinit(); // watchdog cries without this. It believes funcitons get stuck when they do a lot of computing.
@@ -146,6 +145,7 @@ void setup() {
   xTaskCreatePinnedToCore(serverTask,"Server Task",16384,NULL,1,&serverTaskHandle,1);
   xTaskCreatePinnedToCore(clientTask,"Client Task",8192,NULL,1,&clientTaskHandle,0);
 }
+
 
 void loop() {
 }

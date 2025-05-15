@@ -4,6 +4,7 @@
 #include <mbedtls/error.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
+#define KEY_SIZE 32
 
 const uint8_t private_key[KEY_SIZE] = {
   0xC7, 0x10, 0xCC, 0x02, 0x7D, 0x3F, 0x28, 0x58, 
@@ -85,7 +86,7 @@ void generate_shared_secret() {
         goto cleanup;
     }
 
-    memcpy(key, (const void*)shared_secret, KEY_SIZE);
+    memcpy(k, (const void*)shared_secret, ASCON128_KEY_SIZE); //only use the first 16 bytes
 
 cleanup:
     mbedtls_ecp_group_free(&grp);

@@ -29,7 +29,7 @@ void encrypt_file(fs::FS &fs, const char *inputPath, const char *outputPath) {
   uint8_t output[CHUNK_SIZE];
   uint8_t iv_copy[IV_SIZE];
   memcpy(iv_copy, iv, IV_SIZE);
-
+  unsigned long start_time = millis();
   while (inFile.available()) {
     size_t readLen = inFile.read(buffer, CHUNK_SIZE);
     if (readLen < CHUNK_SIZE)
@@ -38,7 +38,9 @@ void encrypt_file(fs::FS &fs, const char *inputPath, const char *outputPath) {
     mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, CHUNK_SIZE, iv_copy, buffer, output);
     outFile.write(output, CHUNK_SIZE);
   }
-
+  unsigned long end_time = millis();
+  float total_time = ((float)(end_time - start_time)) / 1000.0;
+  Serial.printf("Encryption complete in %.4f seconds\n", total_time);
   mbedtls_aes_free(&aes);
   inFile.close();
   outFile.close();
@@ -68,6 +70,7 @@ void decrypt_file(fs::FS &fs, const char *inputPath, const char *outputPath) {
   memcpy(iv_copy, iv, IV_SIZE);
 
   size_t totalWritten = 0;
+  unsigned long start_time = millis();
   while (inFile.available() && totalWritten < originalSize) {
     size_t readLen = inFile.read(buffer, CHUNK_SIZE);
     if (readLen != CHUNK_SIZE) break;
@@ -78,7 +81,9 @@ void decrypt_file(fs::FS &fs, const char *inputPath, const char *outputPath) {
     outFile.write(output, bytesToWrite);
     totalWritten += bytesToWrite;
   }
-
+  unsigned long end_time = millis();
+  float total_time = ((float)(end_time - start_time)) / 1000.0;
+  Serial.printf("Decryption complete in %.4f seconds\n", total_time);
   mbedtls_aes_free(&aes);
   inFile.close();
   outFile.close();

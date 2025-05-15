@@ -59,7 +59,7 @@ void recieve_encrypted_chunk(size_t msg_length, uint8_t *buffer){
 int validate_nonce(size_t nonce){
   if(nonce > MAX_NONCES) return -1;
   if(nonces_table[nonce] == 1) return -1;
-  else nonces_table[nonce] = 1;
+  else nonces_table[nonce] == 1;
   return 0;
 }
 

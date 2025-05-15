@@ -14,12 +14,12 @@ extern "C" {
 #define KEY_SIZE 32    
 
 // Server config
-const char* ssid = "esp";
-const char* password = "MyWifiZone123!";
+const char* ssid = "esp32";
+const char* password = "MyWifiZone123!12";
 WiFiServer server(5000);
 WiFiClient persistentClient;
-//const char* remoteIP = "192.168.244.201"; // red
-const char* remoteIP = "192.168.244.196"; // white
+//const char* remoteIP = "192.168.128.201"; // red
+const char* remoteIP = "192.168.128.196"; // white
 const uint16_t remotePort = 5000;
 
 // global variables
@@ -98,9 +98,6 @@ void serverTask(void* parameter) {
     WiFiClient client = server.available();
     if (client) {
       Serial.println("[Server] Client connected");
-      receive_public_key(client);
-      send_public_key(client);
-      generate_shared_secret();
       while (client.connected()) {
         if (client.available()) {
           recieve_input(client);
@@ -121,14 +118,8 @@ void clientTask(void* parameter) {
 
   while (true) {
     if (!persistentClient.connected()) {
-      Serial.println("[Client] Connecting to remote...");
+      Serial.printf("[Client] Connecting to remote... %s \n", remoteIP);
       if (persistentClient.connect(remoteIP, remotePort)) {
-        Serial.println("[Client] Connected.");
-        send_public_key(persistentClient);
-        receive_public_key(persistentClient);
-        generate_shared_secret();
-        Serial.println("Generating shared key...");
-        print_hex(key, 32);
       } else {
         Serial.println("[Client] Failed to connect, retrying in 5 seconds...");
         delay(5000);
@@ -148,7 +139,7 @@ void setup() {
   esp_task_wdt_deinit(); // watchdog cries without this. It believes funcitons get stuck when they do a lot of computing.
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
-  generate_keypair();
+  generate_shared_secret();
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");

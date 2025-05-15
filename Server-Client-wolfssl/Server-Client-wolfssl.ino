@@ -1,5 +1,7 @@
 #include <user_settings.h>
 #include <wolfssl.h>
+#include <wolfssl/wolfcrypt/ecc.h>    // For ECC key gen
+#include <wolfssl/wolfcrypt/random.h> // For RNG
 
 #include <WiFi.h>
 #include "FS.h"
@@ -21,8 +23,8 @@ const char* ssid = "esp";
 const char* password = "MyWifiZone123!";
 WiFiServer server(5000);
 WiFiClient persistentClient;
-//const char* remoteIP = "192.168.244.201"; // red
-const char* remoteIP = "192.168.244.196"; // white
+const char* remoteIP = "192.168.244.201"; // red
+//const char* remoteIP = "192.168.244.196"; // white
 const uint16_t remotePort = 5000;
 
 // global variables
@@ -36,7 +38,6 @@ unsigned char npub[NONCE_SIZE] = {0};
 unsigned char current_nonce[NONCE_SIZE] = {0};
 unsigned char key[KEY_SIZE] = {0};     //key
 
-
 // Task handles
 TaskHandle_t serverTaskHandle = NULL;
 TaskHandle_t clientTaskHandle = NULL;
@@ -45,6 +46,16 @@ void print_nonce(const unsigned char* npub) {
     for (int i = 0; i < NONCE_SIZE; i++) {
         if (npub[i] < 0x10) Serial.print("0");
         Serial.print(npub[i], HEX);
+    }
+    Serial.println();
+}
+
+void print_hex(const byte* data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        if (data[i] < 0x10) Serial.print("0");
+        Serial.print(data[i], HEX);
+        if (i % 16 == 15) Serial.println();
+        else Serial.print(" ");
     }
     Serial.println();
 }
@@ -82,7 +93,6 @@ int check_file(fs::FS &fs, const char *path){
   return 0;
 }
 
-
 void serverTask(void* parameter) {
   server.begin();
   Serial.println("[Server] Started on port 5000");
@@ -105,6 +115,7 @@ void serverTask(void* parameter) {
   }
 }
 
+
 void clientTask(void* parameter) {
   delay(5000);  // Wait for WiFi and server to start
 
@@ -113,13 +124,14 @@ void clientTask(void* parameter) {
       Serial.println("[Client] Connecting to remote...");
       if (persistentClient.connect(remoteIP, remotePort)) {
         Serial.println("[Client] Connected.");
+        print_hex(key, 32);
       } else {
         Serial.println("[Client] Failed to connect, retrying in 5 seconds...");
         delay(5000);
         continue;
       }
     }
-    if (Serial.available()) { // the following code reads the text from the terminal and sends it to the new client, it also appends the neccesary metadata.
+    if (Serial.available()) { 
       String input = Serial.readStringUntil('\n');
       input.trim(); 
       send_request(input);
@@ -128,12 +140,13 @@ void clientTask(void* parameter) {
   }
 }
 
+
 void setup() {
   Serial.begin(115200);
   esp_task_wdt_deinit(); // watchdog cries without this. It believes funcitons get stuck when they do a lot of computing.
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
-
+  generate_shared_secret();
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
