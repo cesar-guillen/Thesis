@@ -18,8 +18,7 @@ const char* ssid = "esp32";
 const char* password = "MyWifiZone123!12";
 WiFiServer server(5000);
 WiFiClient persistentClient;
-//const char* remoteIP = "192.168.128.201"; // red
-const char* remoteIP = "192.168.128.196"; // white
+String userInputIP = "";
 const uint16_t remotePort = 5000;
 
 // global variables
