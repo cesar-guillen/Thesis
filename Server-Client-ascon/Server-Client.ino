@@ -22,8 +22,7 @@ const char* ssid = "esp";
 const char* password = "MyWifiZone123!";
 WiFiServer server(5000);
 WiFiClient persistentClient;
-//const char* remoteIP = "192.168.244.201"; // red
-const char* remoteIP = "192.168.244.196"; // white
+String userInputIP = "";
 const uint16_t remotePort = 5000;
 
 // global variables
@@ -108,9 +107,15 @@ void serverTask(void* parameter) {
 void clientTask(void* parameter) {
   delay(5000);  // Wait for WiFi and server to start
 
+  while (userInputIP == "") {
+    delay(500);
+  }
+
+  const char* remoteIP = userInputIP.c_str();
   while (true) {
     if (!persistentClient.connected()) {
-      Serial.println("[Client] Connecting to remote...");
+      Serial.print("[Client] Connecting to ");
+      Serial.println(remoteIP);
       if (persistentClient.connect(remoteIP, remotePort)) {
         Serial.println("[Client] Connected.");
       } else {
@@ -119,12 +124,12 @@ void clientTask(void* parameter) {
         continue;
       }
     }
-    if (Serial.available()) { // the following code reads the text from the terminal and sends it to the new client, it also appends the neccesary metadata.
+    if (Serial.available()) {
       String input = Serial.readStringUntil('\n');
       input.trim(); 
       send_request(input);
     }
-    delay(100); 
+    delay(100);
   }
 }
 
@@ -141,6 +146,16 @@ void setup() {
   Serial.println("\nWiFi connected. IP address: ");
   Serial.println(WiFi.localIP());
 
+  Serial.println("Enter the remote IP address to connect to:");
+  while (userInputIP == "") {
+    if (Serial.available()) {
+      userInputIP = Serial.readStringUntil('\n');
+      userInputIP.trim();
+    }
+    delay(100);
+  }
+  Serial.print("Using remote IP: ");
+  Serial.println(userInputIP);
   // Start tasks
   xTaskCreatePinnedToCore(serverTask,"Server Task",16384,NULL,1,&serverTaskHandle,1);
   xTaskCreatePinnedToCore(clientTask,"Client Task",8192,NULL,1,&clientTaskHandle,0);

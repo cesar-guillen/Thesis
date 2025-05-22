@@ -112,28 +112,35 @@ void serverTask(void* parameter) {
   }
 }
 
-
 void clientTask(void* parameter) {
   delay(5000);  // Wait for WiFi and server to start
 
+  while (userInputIP == "") {
+    delay(500);
+  }
+
+  const char* remoteIP = userInputIP.c_str();
   while (true) {
     if (!persistentClient.connected()) {
-      Serial.printf("[Client] Connecting to remote... %s \n", remoteIP);
+      Serial.print("[Client] Connecting to ");
+      Serial.println(remoteIP);
       if (persistentClient.connect(remoteIP, remotePort)) {
+        Serial.println("[Client] Connected.");
       } else {
         Serial.println("[Client] Failed to connect, retrying in 5 seconds...");
         delay(5000);
         continue;
       }
     }
-    if (Serial.available()) { 
+    if (Serial.available()) {
       String input = Serial.readStringUntil('\n');
       input.trim(); 
       send_request(input);
     }
-    delay(100); 
+    delay(100);
   }
 }
+
 void setup() {
   Serial.begin(115200);
   esp_task_wdt_deinit(); // watchdog cries without this. It believes funcitons get stuck when they do a lot of computing.
@@ -147,7 +154,16 @@ void setup() {
 
   Serial.println("\nWiFi connected. IP address: ");
   Serial.println(WiFi.localIP());
-
+  Serial.println("Enter the remote IP address to connect to:");
+  while (userInputIP == "") {
+    if (Serial.available()) {
+      userInputIP = Serial.readStringUntil('\n');
+      userInputIP.trim();
+    }
+    delay(100);
+  }
+  Serial.print("Using remote IP: ");
+  Serial.println(userInputIP);
   // Start tasks
   xTaskCreatePinnedToCore(serverTask,"Server Task",16384,NULL,1,&serverTaskHandle,1);
   xTaskCreatePinnedToCore(clientTask,"Client Task",8192,NULL,1,&clientTaskHandle,0);
