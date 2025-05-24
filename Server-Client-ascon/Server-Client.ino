@@ -14,7 +14,7 @@ extern "C" {
   #include "esp_task_wdt.h"
 }
 
-#define CRYPTO_BYTES 64   // Size of hash
+#define CRYPTO_BYTES 32   // Size of hash
 #define MAX_NONCES 2000
 
 // Server config
