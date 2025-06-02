@@ -9,10 +9,9 @@ void send_request(String input) {
   size_t msg_len = strlen(msg);
   char encrypted_msg[MAX_ENCRYPTED_MSG_SIZE];
   size_t clen = 0;
-  encrypt_message(msg, encrypted_msg, &clen, msg_len, npub);
+  encrypt_message(msg, encrypted_msg , &clen, msg_len, current_nonce, msg_code);
   char plaintext[MAX_ENCRYPTED_MSG_SIZE];
   size_t plaintext_len = 0;
-  if (decrypt_message(encrypted_msg, clen, plaintext, &plaintext_len, npub) < 0) Serial.println("whaaaaaaaaaat");
   size_t total_payload_size = sizeof(msg_code) + NONCE_SIZE + clen;
   size_t total_packet_size = sizeof(size_t) + total_payload_size;
 
@@ -45,7 +44,8 @@ void send_hash(fs::FS &fs, const char *original_file) {
   // Encrypt the hash
   char encrypted_hash[MAX_ENCRYPTED_MSG_SIZE] = { 0 };
   size_t clen = 0;
-  encrypt_message((char*)hash, encrypted_hash, &clen, HASH_SIZE, npub);
+  encrypt_message((char*)hash, encrypted_hash, &clen, HASH_SIZE, npub, hash_code);
+
 
   size_t payload_size = sizeof(hash_code) + NONCE_SIZE + clen;
   size_t total_size = sizeof(size_t) + payload_size;

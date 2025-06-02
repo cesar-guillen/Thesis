@@ -9,7 +9,7 @@ void send_request(String input) {
   size_t msg_len = strlen(msg);
   char encrypted_msg[MAX_ENCRYPTED_MSG_SIZE];
   size_t clen = 0;
-  encrypt_message(msg, encrypted_msg, &clen, msg_len, npub);
+  encrypt_message(msg, encrypted_msg, &clen, msg_len, npub, msg_code);
   size_t total_payload_size = sizeof(msg_code) + ASCON128_NONCE_SIZE + clen;
   size_t total_packet_size = sizeof(size_t) + total_payload_size;
 
@@ -43,7 +43,7 @@ void send_hash(fs::FS &fs, const char *original_file) {
   // Encrypt the hash
   char encrypted_hash[MAX_ENCRYPTED_MSG_SIZE] = { 0 };
   size_t clen = 0;
-  encrypt_message((char*)hash, encrypted_hash, &clen, CRYPTO_BYTES, npub);
+  encrypt_message((char*)hash, encrypted_hash, &clen, CRYPTO_BYTES, npub, hash_code);
 
   size_t payload_size = sizeof(hash_code) + ASCON128_NONCE_SIZE + clen;
   size_t total_size = sizeof(size_t) + payload_size;

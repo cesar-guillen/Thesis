@@ -17,7 +17,8 @@ void receive_hash(size_t msg_length, uint8_t* buffer) {
   char decrypted_hash[CRYPTO_BYTES] = {0};
   size_t decrypted_len = 0;
 
-  int result = decrypt_message((char*)encrypted_hash, clen, decrypted_hash, &decrypted_len, current_nonce);
+  int result = decrypt_message((char*)encrypted_hash, clen, decrypted_hash, &decrypted_len, current_nonce, hash_code, CRYPTO_BYTES);
+
   if (result < 0) {
     Serial.println("Decryption failed in receive_hash()");
     return;
@@ -65,8 +66,8 @@ int validate_nonce(size_t nonce){
 
 int decrypt_request(const char* ciphertext, size_t clen, char* plaintext, const unsigned char* nonce) {
   size_t decrypted_mlen = 0;
-
-  int result = decrypt_message((char*)ciphertext ,clen, plaintext, &decrypted_mlen, nonce);
+  size_t mlen_expected = clen - 16;
+  int result = decrypt_message((char*)ciphertext, clen, plaintext, &decrypted_mlen, nonce, msg_code, mlen_expected);
 
   if (result < 0) {
     Serial.println("Decryption failed in decrypt_request()");

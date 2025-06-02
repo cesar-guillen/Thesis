@@ -1,7 +1,5 @@
 #include <user_settings.h>
 #include <wolfssl.h>
-#include <wolfssl/wolfcrypt/ecc.h>    // For ECC key gen
-#include <wolfssl/wolfcrypt/random.h> // For RNG
 
 #include <WiFi.h>
 #include "FS.h"
@@ -16,14 +14,17 @@ extern "C" {
 #define NONCE_SIZE 12
 #define HASH_SIZE 32
 #define MAX_NONCES 2000
-#define KEY_SIZE 32    
+#define KEY_SIZE 32   
+#define CHUNK_SIZE 4096
+
 
 // Server config
-const char* ssid = "esp";
-const char* password = "MyWifiZone123!";
+const char* ssid = "esp32";
+const char* password = "MyWifiZone123!12";
 WiFiServer server(5000);
 WiFiClient persistentClient;
-String userInputIP = "";
+//const char* remoteIP = "192.168.128.201"; // red
+const char* remoteIP = "192.168.128.196"; // white
 const uint16_t remotePort = 5000;
 
 // global variables
@@ -37,17 +38,10 @@ unsigned char npub[NONCE_SIZE] = {0};
 unsigned char current_nonce[NONCE_SIZE] = {0};
 unsigned char key[KEY_SIZE] = {0};     //key
 
+
 // Task handles
 TaskHandle_t serverTaskHandle = NULL;
 TaskHandle_t clientTaskHandle = NULL;
-
-void print_nonce(const unsigned char* npub) {
-    for (int i = 0; i < NONCE_SIZE; i++) {
-        if (npub[i] < 0x10) Serial.print("0");
-        Serial.print(npub[i], HEX);
-    }
-    Serial.println();
-}
 
 void print_hex(const byte* data, size_t len) {
     for (size_t i = 0; i < len; i++) {
@@ -55,6 +49,14 @@ void print_hex(const byte* data, size_t len) {
         Serial.print(data[i], HEX);
         if (i % 16 == 15) Serial.println();
         else Serial.print(" ");
+    }
+    Serial.println();
+}
+
+void print_nonce(const unsigned char* npub) {
+    for (int i = 0; i < NONCE_SIZE; i++) {
+        if (npub[i] < 0x10) Serial.print("0");
+        Serial.print(npub[i], HEX);
     }
     Serial.println();
 }
@@ -92,6 +94,7 @@ int check_file(fs::FS &fs, const char *path){
   return 0;
 }
 
+
 void serverTask(void* parameter) {
   server.begin();
   Serial.println("[Server] Started on port 5000");
@@ -118,60 +121,82 @@ void serverTask(void* parameter) {
 void clientTask(void* parameter) {
   delay(5000);  // Wait for WiFi and server to start
 
-  while (userInputIP == "") {
-    delay(500);
-  }
-
-  const char* remoteIP = userInputIP.c_str();
   while (true) {
     if (!persistentClient.connected()) {
-      Serial.print("[Client] Connecting to ");
-      Serial.println(remoteIP);
+      Serial.printf("[Client] Connecting to remote... %s \n", remoteIP);
       if (persistentClient.connect(remoteIP, remotePort)) {
-        Serial.println("[Client] Connected.");
       } else {
         Serial.println("[Client] Failed to connect, retrying in 5 seconds...");
         delay(5000);
         continue;
       }
     }
-    if (Serial.available()) {
+    if (Serial.available()) { 
       String input = Serial.readStringUntil('\n');
       input.trim(); 
       send_request(input);
     }
-    delay(100);
+    delay(100); 
   }
 }
 
+volatile bool keepMonitoring = true;
+
+void monitor_task(void *param) {
+  char stats[1024];
+  while (keepMonitoring) {
+    //vTaskGetRunTimeStats(stats);
+    //Serial.println("CPU usage:\n" + String(stats));
+    Serial.printf("Free heap: %d bytes\n\n", heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    vTaskDelay(pdMS_TO_TICKS(100));  // Run every 500 ms
+  }
+  Serial.println("Monitoring ended.");
+  vTaskDelete(NULL); // Cleanly delete this task
+}
 
 void setup() {
   Serial.begin(115200);
-  esp_task_wdt_deinit(); // watchdog cries without this. It believes funcitons get stuck when they do a lot of computing.
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
-  generate_shared_secret();
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  esp_task_wdt_deinit(); // Prevent watchdog trigger
+
+  if (!SD.begin()) {
+    Serial.println("Card Mount Failed");
+    return;
   }
 
-  Serial.println("\nWiFi connected. IP address: ");
-  Serial.println(WiFi.localIP());
-  Serial.println("Enter the remote IP address to connect to:");
-  while (userInputIP == "") {
-    if (Serial.available()) {
-      userInputIP = Serial.readStringUntil('\n');
-      userInputIP.trim();
-    }
-    delay(100);
+  unsigned char finalhash[HASH_SIZE];
+  
+    Serial.printf("Testing with chunk size of: %d\n", CHUNK_SIZE);
+    String baseFilename = "/2_22.txt";
+    String encryptedFilename = baseFilename + ".enc" + String(CHUNK_SIZE);
+    String decryptedFilename = baseFilename + ".dec" + String(CHUNK_SIZE);
+
+    hash_file(SD, baseFilename.c_str(), finalhash);
+
+    unsigned long startEncrypt = millis();
+    //encrypt_file(SD, baseFilename.c_str(), encryptedFilename.c_str());
+    unsigned long endEncrypt = millis();
+    float encryptDuration = (endEncrypt - startEncrypt) / 1000.0;
+    Serial.printf("Encryption took %.3f seconds\n", encryptDuration);
+
+    unsigned long startDecrypt = millis();
+    //decrypt_file(SD, encryptedFilename.c_str(), decryptedFilename.c_str());
+    unsigned long endDecrypt = millis();
+    float decryptDuration = (endDecrypt - startDecrypt) / 1000.0;
+    Serial.printf("Decryption took %.3f seconds\n", decryptDuration);
+
+    delay(60000);
+  
+
+
+
+  vTaskDelay(pdMS_TO_TICKS(500));
+  keepMonitoring = false;
+  Serial.println("Done. Halting...");
+  while (true) {
+    delay(1000);
   }
-  Serial.print("Using remote IP: ");
-  Serial.println(userInputIP);
-  // Start tasks
-  xTaskCreatePinnedToCore(serverTask,"Server Task",16384,NULL,1,&serverTaskHandle,1);
-  xTaskCreatePinnedToCore(clientTask,"Client Task",8192,NULL,1,&clientTaskHandle,0);
 }
+
 
 void loop() {
 }

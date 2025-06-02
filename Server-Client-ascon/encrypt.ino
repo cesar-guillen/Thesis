@@ -39,18 +39,31 @@ void prepare_file(String file_name){
 }
 
 
-int encrypt_message(char* plaintext, char* cyphertext, size_t *clen, size_t mlen, unsigned char *npub){
+int encrypt_message(char* plaintext, char* cyphertext, size_t *clen, size_t mlen, unsigned char *npub, uint8_t msg_code) {
   unsigned char *m = (unsigned char*)plaintext;
-  unsigned char ad[] = "";
-  unsigned long long adlen = strlen((char*)ad);
 
-  ascon128_aead_encrypt((unsigned char*)cyphertext, clen, m, mlen, ad, adlen, (const char unsigned*)npub, k);
+  size_t adlen = sizeof(msg_code) + sizeof(size_t) + ASCON128_NONCE_SIZE;
+  unsigned char ad[adlen];
+
+  size_t offset = 0;
+  memcpy(ad + offset, &msg_code, sizeof(msg_code)); offset += sizeof(msg_code);
+  memcpy(ad + offset, &mlen, sizeof(size_t)); offset += sizeof(size_t);
+  memcpy(ad + offset, npub, ASCON128_NONCE_SIZE);
+
+  ascon128_aead_encrypt((unsigned char*)cyphertext, clen, m, mlen, ad, adlen, (const unsigned char*)npub, k);
   return 0;
 }
 
-long long unsigned int decrypt_message(char *ciphertext,size_t clen ,char *plaintext, size_t* decrypted_mlen, const unsigned char* npub){
-  unsigned char ad[] = "";  // Optional associated data
-  unsigned long long adlen = strlen((char*)ad);
+
+long long unsigned int decrypt_message(char *ciphertext, size_t clen, char *plaintext, size_t* decrypted_mlen, const unsigned char* npub, uint8_t msg_code, size_t expected_mlen) {
+  size_t adlen = sizeof(msg_code) + sizeof(size_t) + ASCON128_NONCE_SIZE;
+  unsigned char ad[adlen];
+
+  size_t offset = 0;
+  memcpy(ad + offset, &msg_code, sizeof(msg_code)); offset += sizeof(msg_code);
+  memcpy(ad + offset, &expected_mlen, sizeof(size_t)); offset += sizeof(size_t);
+  memcpy(ad + offset, npub, ASCON128_NONCE_SIZE);
+
   int decrypt_status = ascon128_aead_decrypt((unsigned char*)plaintext, decrypted_mlen, (const unsigned char*)ciphertext, clen, ad, adlen, npub, k);
   if (decrypt_status < 0) {
     Serial.println("Decryption failed!");
@@ -58,6 +71,7 @@ long long unsigned int decrypt_message(char *ciphertext,size_t clen ,char *plain
   }
   return *decrypted_mlen;
 }
+
 
 void print_hex(const unsigned char* data, size_t len) {
   for (size_t i = 0; i < len; i++) {

@@ -7,7 +7,7 @@
 #include "FS.h"
 #include "SD.h"
 #include "SPI.h"
-#define CHUNK_SIZE 2048
+#define CHUNK_SIZE 1024
 
 void hash_file(fs::FS &fs, const char *path, unsigned char *finalhash) {
   Serial.printf("Hashing file contents of %s ... \n", path);
@@ -16,6 +16,8 @@ void hash_file(fs::FS &fs, const char *path, unsigned char *finalhash) {
     Serial.println("Failed to open file");
     return;
   }
+
+  // Initialize ASCON hash context
   ascon_hash_state_t ctx;
   ascon_hash_init(&ctx);
 
@@ -23,6 +25,8 @@ void hash_file(fs::FS &fs, const char *path, unsigned char *finalhash) {
   size_t file_hashed = 0;
 
   unsigned long start_time = millis();
+
+  // Allocate buffer once
   unsigned char *curr_chunk = (unsigned char *)malloc(CHUNK_SIZE);
   if (curr_chunk == nullptr) {
     Serial.println("Memory allocation failed");
@@ -37,15 +41,16 @@ void hash_file(fs::FS &fs, const char *path, unsigned char *finalhash) {
       ascon_hash_update(&ctx, curr_chunk, actually_read);
       file_hashed += actually_read;
     } else {
-      break; 
+      break; // read error or EOF
     }
   }
 
   ascon_hash_finalize(&ctx, finalhash);
+
   unsigned long end_time = millis();
   float total_time = ((float)(end_time - start_time)) / 1000.0;
   Serial.printf("Hashing complete in %.3f seconds\n", total_time);
-  
+
   file.close();
   free(curr_chunk);
 }

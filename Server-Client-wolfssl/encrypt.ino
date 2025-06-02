@@ -1,7 +1,6 @@
 #include <wolfssl/wolfcrypt/aes.h>
 #include <wolfssl/wolfcrypt/aes.h>
 #include <string.h>
-#define CHUNK_SIZE 16
 #define IV_SIZE 16
 
 const uint8_t iv[IV_SIZE] = { 0 };
@@ -79,6 +78,7 @@ void decrypt_file(fs::FS &fs, const char *inputPath, const char *outputPath) {
 
     inFile.close();
     outFile.close();
+    Serial.println("Finished Decrypting");
 }
 
 
@@ -121,7 +121,8 @@ void prepare_file(String file_name){
   deleteFile(SD, encrypted_filed_name.c_str());
 }
 
-int encrypt_message(char* plaintext, char* ciphertext, size_t* clen, size_t mlen, const unsigned char* npub) {
+int encrypt_message(char* plaintext, char* ciphertext, size_t* clen, size_t mlen,
+                    const unsigned char* npub, uint8_t msg_code) {
     Aes aes;
     int ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
     if (ret != 0) return -1;
@@ -133,16 +134,26 @@ int encrypt_message(char* plaintext, char* ciphertext, size_t* clen, size_t mlen
     }
 
     unsigned char tag[16];
-    unsigned char ad[] = "";
+
+    // Build associated data: msg_code + mlen + nonce
+    unsigned char ad[1 + sizeof(size_t) + NONCE_SIZE];
     word32 adlen = 0;
+    size_t offset = 0;
+    memcpy(ad + offset, &msg_code, sizeof(msg_code)); offset += sizeof(msg_code);
+    memcpy(ad + offset, &mlen, sizeof(mlen)); offset += sizeof(mlen);
+    memcpy(ad + offset, npub, NONCE_SIZE); offset += NONCE_SIZE;
+    adlen = offset;
 
     ret = wc_AesGcmEncrypt(&aes,
-                           (byte*)ciphertext,              
-                           (const byte*)plaintext, mlen, npub, 12, tag, 16, ad, adlen); 
+                           (byte*)ciphertext,
+                           (const byte*)plaintext, mlen,
+                           npub, 12,
+                           tag, 16,
+                           ad, adlen);
 
     if (ret != 0) {
         wc_AesFree(&aes);
-        Serial.printf("encryption failed");
+        Serial.println("Encryption failed");
         return -1;
     }
 
@@ -155,7 +166,9 @@ int encrypt_message(char* plaintext, char* ciphertext, size_t* clen, size_t mlen
 
 
 
-int decrypt_message(char* ciphertext, size_t clen, char* plaintext, size_t* decrypted_mlen, const unsigned char* npub) {
+int decrypt_message(char* ciphertext, size_t clen, char* plaintext,
+                    size_t* decrypted_mlen, const unsigned char* npub,
+                    uint8_t msg_code, size_t mlen_expected) {
     if (clen < 16) return -1;
 
     size_t ctext_len = clen - 16;
@@ -172,12 +185,21 @@ int decrypt_message(char* ciphertext, size_t clen, char* plaintext, size_t* decr
         return -1;
     }
 
-    unsigned char ad[] = "";
+    // Reconstruct associated data
+    unsigned char ad[1 + sizeof(size_t) + NONCE_SIZE];
     word32 adlen = 0;
+    size_t offset = 0;
+    memcpy(ad + offset, &msg_code, sizeof(msg_code)); offset += sizeof(msg_code);
+    memcpy(ad + offset, &mlen_expected, sizeof(mlen_expected)); offset += sizeof(mlen_expected);
+    memcpy(ad + offset, npub, NONCE_SIZE); offset += NONCE_SIZE;
+    adlen = offset;
 
     ret = wc_AesGcmDecrypt(&aes,
-                           (byte*)plaintext,                
-                           (const byte*)ciphertext, ctext_len, npub, 12, tag, 16, ad, adlen);                       
+                           (byte*)plaintext,
+                           (const byte*)ciphertext, ctext_len,
+                           npub, 12,
+                           tag, 16,
+                           ad, adlen);
 
     wc_AesFree(&aes);
 
@@ -189,6 +211,7 @@ int decrypt_message(char* ciphertext, size_t clen, char* plaintext, size_t* decr
     *decrypted_mlen = ctext_len;
     return *decrypted_mlen;
 }
+
 
 void increment_nonce(unsigned char nonce[NONCE_SIZE]) {
     for (int i = NONCE_SIZE - 1; i >= 0; i--) {

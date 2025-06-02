@@ -5,8 +5,6 @@
 #include "FS.h"
 #include "SD.h"
 #include "SPI.h"
-#define CHUNK_SIZE 2048
-
 
 
 void hash_file(fs::FS &fs, const char *path, unsigned char *finalhash) {

@@ -11,14 +11,17 @@ extern "C" {
 #define NONCE_SIZE 12
 #define HASH_SIZE 32
 #define MAX_NONCES 2000
-#define KEY_SIZE 32    
+#define KEY_SIZE 32   
+size_t CHUNK_SIZE = 16;
+
 
 // Server config
 const char* ssid = "esp32";
 const char* password = "MyWifiZone123!12";
 WiFiServer server(5000);
 WiFiClient persistentClient;
-String userInputIP = "";
+//const char* remoteIP = "192.168.128.201"; // red
+const char* remoteIP = "192.168.128.196"; // white
 const uint16_t remotePort = 5000;
 
 // global variables
@@ -111,62 +114,67 @@ void serverTask(void* parameter) {
   }
 }
 
+
 void clientTask(void* parameter) {
   delay(5000);  // Wait for WiFi and server to start
 
-  while (userInputIP == "") {
-    delay(500);
-  }
-
-  const char* remoteIP = userInputIP.c_str();
   while (true) {
     if (!persistentClient.connected()) {
-      Serial.print("[Client] Connecting to ");
-      Serial.println(remoteIP);
+      Serial.printf("[Client] Connecting to remote... %s \n", remoteIP);
       if (persistentClient.connect(remoteIP, remotePort)) {
-        Serial.println("[Client] Connected.");
       } else {
         Serial.println("[Client] Failed to connect, retrying in 5 seconds...");
         delay(5000);
         continue;
       }
     }
-    if (Serial.available()) {
+    if (Serial.available()) { 
       String input = Serial.readStringUntil('\n');
       input.trim(); 
       send_request(input);
     }
-    delay(100);
+    delay(100); 
   }
+}
+
+volatile bool keepMonitoring = true;
+
+void monitor_task(void *param) {
+  char stats[1024];
+  while (keepMonitoring) {
+    //vTaskGetRunTimeStats(stats);
+    //Serial.println("CPU usage:\n" + String(stats));
+    Serial.printf("Free heap: %d bytes\n\n", heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    vTaskDelay(pdMS_TO_TICKS(100));  // Run every 500 ms
+  }
+  Serial.println("Monitoring ended.");
+  vTaskDelete(NULL); // Cleanly delete this task
 }
 
 void setup() {
   Serial.begin(115200);
-  esp_task_wdt_deinit(); // watchdog cries without this. It believes funcitons get stuck when they do a lot of computing.
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
-  generate_shared_secret();
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
+  delay(2000);  // Allow time for Serial monitor to open
 
-  Serial.println("\nWiFi connected. IP address: ");
-  Serial.println(WiFi.localIP());
-  Serial.println("Enter the remote IP address to connect to:");
-  while (userInputIP == "") {
-    if (Serial.available()) {
-      userInputIP = Serial.readStringUntil('\n');
-      userInputIP.trim();
+  for (size_t size = 8; size <= 4096; size *= 2) {
+    Serial.printf("Allocating %u bytes...\n", size);
+
+    void* ptr = malloc(size);
+    if (ptr != nullptr) {
+      unsigned long start = micros();
+      memset(ptr, 0, size);
+      unsigned long end = micros();
+
+      Serial.printf("Zeroing %u bytes took %lu microseconds\n", size, end - start);
+      free(ptr);
+    } else {
+      Serial.println("Failed to allocate memory.");
     }
-    delay(100);
+
+    delay(1000);  // Delay between tests
   }
-  Serial.print("Using remote IP: ");
-  Serial.println(userInputIP);
-  // Start tasks
-  xTaskCreatePinnedToCore(serverTask,"Server Task",16384,NULL,1,&serverTaskHandle,1);
-  xTaskCreatePinnedToCore(clientTask,"Client Task",8192,NULL,1,&clientTaskHandle,0);
 }
+
+
 
 void loop() {
 }

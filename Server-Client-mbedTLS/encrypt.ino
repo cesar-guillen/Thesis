@@ -128,7 +128,8 @@ void prepare_file(String file_name){
   deleteFile(SD, encrypted_filed_name.c_str());
 }
 
-int encrypt_message(char* plaintext, char* ciphertext, size_t* clen, size_t mlen, const unsigned char* npub) {
+int encrypt_message(char* plaintext, char* ciphertext, size_t* clen, size_t mlen,
+                    const unsigned char* npub, uint8_t msg_code) {
     mbedtls_gcm_context gcm;
     mbedtls_gcm_init(&gcm);
 
@@ -137,11 +138,22 @@ int encrypt_message(char* plaintext, char* ciphertext, size_t* clen, size_t mlen
         return -1;
     }
 
-    unsigned char tag[16];
-    unsigned char ad[] = "";
-    size_t adlen = 0;
+    // Prepare associated data
+    unsigned char ad[1 + sizeof(size_t) + NONCE_SIZE];
+    size_t offset = 0;
+    memcpy(ad + offset, &msg_code, sizeof(msg_code)); offset += sizeof(msg_code);
+    memcpy(ad + offset, &mlen, sizeof(mlen)); offset += sizeof(mlen);
+    memcpy(ad + offset, npub, NONCE_SIZE);
+    size_t adlen = offset;
 
-    if (mbedtls_gcm_crypt_and_tag(&gcm, MBEDTLS_GCM_ENCRYPT, mlen, npub, 12, ad, adlen, (unsigned char*)plaintext, (unsigned char*)ciphertext, 16, tag) != 0) {
+    unsigned char tag[16];
+
+    if (mbedtls_gcm_crypt_and_tag(&gcm, MBEDTLS_GCM_ENCRYPT, mlen,
+                                  npub, 12,  // 12 is standard nonce size for GCM
+                                  ad, adlen,
+                                  (unsigned char*)plaintext,
+                                  (unsigned char*)ciphertext,
+                                  16, tag) != 0) {
         mbedtls_gcm_free(&gcm);
         return -1;
     }
@@ -154,7 +166,10 @@ int encrypt_message(char* plaintext, char* ciphertext, size_t* clen, size_t mlen
 }
 
 
-int decrypt_message(char* ciphertext, size_t clen, char* plaintext, size_t* decrypted_mlen, const unsigned char* npub) {
+
+int decrypt_message(char* ciphertext, size_t clen, char* plaintext,
+                    size_t* decrypted_mlen, const unsigned char* npub,
+                    uint8_t msg_code, size_t mlen_expected) {
     if (clen < 16) return -1;
 
     size_t ctext_len = clen - 16;
@@ -174,10 +189,19 @@ int decrypt_message(char* ciphertext, size_t clen, char* plaintext, size_t* decr
         return -1;
     }
 
-    unsigned char ad[] = "";
-    size_t adlen = 0;
+    // Recreate associated data
+    unsigned char ad[1 + sizeof(size_t) + NONCE_SIZE];
+    size_t offset = 0;
+    memcpy(ad + offset, &msg_code, sizeof(msg_code)); offset += sizeof(msg_code);
+    memcpy(ad + offset, &mlen_expected, sizeof(mlen_expected)); offset += sizeof(mlen_expected);
+    memcpy(ad + offset, npub, NONCE_SIZE);
+    size_t adlen = offset;
 
-    int ret = mbedtls_gcm_auth_decrypt(&gcm, ctext_len, npub, 12, ad, adlen, tag, 16, tmp_ctext, (unsigned char*)plaintext);
+    int ret = mbedtls_gcm_auth_decrypt(&gcm, ctext_len,
+                                       npub, 12,
+                                       ad, adlen,
+                                       tag, 16,
+                                       tmp_ctext, (unsigned char*)plaintext);
 
     free(tmp_ctext);
     mbedtls_gcm_free(&gcm);
@@ -190,6 +214,7 @@ int decrypt_message(char* ciphertext, size_t clen, char* plaintext, size_t* decr
     *decrypted_mlen = ctext_len;
     return *decrypted_mlen;
 }
+
 
 void increment_nonce(unsigned char nonce[NONCE_SIZE]) {
     for (int i = NONCE_SIZE - 1; i >= 0; i--) {

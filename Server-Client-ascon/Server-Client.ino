@@ -22,7 +22,8 @@ const char* ssid = "esp";
 const char* password = "MyWifiZone123!";
 WiFiServer server(5000);
 WiFiClient persistentClient;
-String userInputIP = "";
+//const char* remoteIP = "192.168.244.201"; // red
+const char* remoteIP = "192.168.244.196"; // white
 const uint16_t remotePort = 5000;
 
 // global variables
@@ -107,15 +108,9 @@ void serverTask(void* parameter) {
 void clientTask(void* parameter) {
   delay(5000);  // Wait for WiFi and server to start
 
-  while (userInputIP == "") {
-    delay(500);
-  }
-
-  const char* remoteIP = userInputIP.c_str();
   while (true) {
     if (!persistentClient.connected()) {
-      Serial.print("[Client] Connecting to ");
-      Serial.println(remoteIP);
+      Serial.println("[Client] Connecting to remote...");
       if (persistentClient.connect(remoteIP, remotePort)) {
         Serial.println("[Client] Connected.");
       } else {
@@ -124,43 +119,60 @@ void clientTask(void* parameter) {
         continue;
       }
     }
-    if (Serial.available()) {
+    if (Serial.available()) { // the following code reads the text from the terminal and sends it to the new client, it also appends the neccesary metadata.
       String input = Serial.readStringUntil('\n');
       input.trim(); 
       send_request(input);
     }
-    delay(100);
+    delay(100); 
   }
 }
 
+volatile bool keepMonitoring = true;
+
+void monitor_task(void *param) {
+  char stats[1024];
+  while (keepMonitoring) {
+    vTaskGetRunTimeStats(stats);
+
+    // Convert to string for easy filtering
+    String statStr = String(stats);
+
+    // Find the line for "loopTask"
+    int startIdx = statStr.indexOf("loopTask");
+    if (startIdx != -1) {
+      int endIdx = statStr.indexOf('\n', startIdx);
+      String loopLine = statStr.substring(startIdx, endIdx);
+
+      // Extract the percentage column (third tab-separated value)
+      int tab1 = loopLine.indexOf('\t');
+      int tab2 = loopLine.indexOf('\t', tab1 + 1);
+      int tab3 = loopLine.indexOf('\t', tab2 + 1);
+
+      if (tab3 != -1) {
+        String rawPercent = loopLine.substring(tab3);
+        rawPercent.trim();
+        String percent = rawPercent;
+        Serial.println("" + percent);
+      }
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(500));  // Update every 500ms
+  }
+
+  Serial.println("Monitoring ended.");
+  vTaskDelete(NULL);
+}
 void setup() {
   Serial.begin(115200);
-  esp_task_wdt_deinit(); // watchdog cries without this. It believes funcitons get stuck when they do a lot of computing.
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+    if (!SD.begin()) {
+    Serial.println("Card Mount Failed");
+    return;
   }
-
-  Serial.println("\nWiFi connected. IP address: ");
-  Serial.println(WiFi.localIP());
-
-  Serial.println("Enter the remote IP address to connect to:");
-  while (userInputIP == "") {
-    if (Serial.available()) {
-      userInputIP = Serial.readStringUntil('\n');
-      userInputIP.trim();
-    }
-    delay(100);
-  }
-  Serial.print("Using remote IP: ");
-  Serial.println(userInputIP);
-  // Start tasks
-  xTaskCreatePinnedToCore(serverTask,"Server Task",16384,NULL,1,&serverTaskHandle,1);
-  xTaskCreatePinnedToCore(clientTask,"Client Task",8192,NULL,1,&clientTaskHandle,0);
+  esp_task_wdt_deinit(); // Prevent watchdog trigger
+    String baseFilename = "/2_22.txt";
+    hash_file(SD, baseFilename.c_str(), hash);
+    
 }
-
-
 void loop() {
 }
