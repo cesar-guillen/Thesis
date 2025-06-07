@@ -1,9 +1,10 @@
 #include "mbedtls/aes.h"
 #include "mbedtls/gcm.h"
-#define CHUNK_SIZE 16
-#define IV_SIZE 16
+#include "mbedtls/chacha20.h"
 
-const uint8_t iv[IV_SIZE] = { 0 };
+#define IV_SIZE 12      // ChaCha20 uses a 96-bit (12-byte) nonce
+
+const uint8_t iv[IV_SIZE] = {0}; // should be randomized per file ideally
 unsigned char firsthash[HASH_SIZE] = {0};
 unsigned char secondhash[HASH_SIZE] = {0};
 
@@ -17,35 +18,31 @@ void encrypt_file(fs::FS &fs, const char *inputPath, const char *outputPath) {
   }
 
   size_t originalSize = inFile.size(); 
-
-  // write the orignal file size at the start of the encrypted file
   outFile.write((uint8_t*)&originalSize, sizeof(originalSize));
 
-  mbedtls_aes_context aes;
-  mbedtls_aes_init(&aes);
-  mbedtls_aes_setkey_enc(&aes, key, KEY_SIZE * 8);
+  mbedtls_chacha20_context chacha;
+  mbedtls_chacha20_init(&chacha);
+  mbedtls_chacha20_setkey(&chacha, key);
+
+  uint8_t iv_copy[IV_SIZE];
+  memcpy(iv_copy, iv, IV_SIZE);
+  mbedtls_chacha20_starts(&chacha, iv_copy, 0); // counter starts at 0
 
   uint8_t buffer[CHUNK_SIZE];
   uint8_t output[CHUNK_SIZE];
-  uint8_t iv_copy[IV_SIZE];
-  memcpy(iv_copy, iv, IV_SIZE);
   unsigned long start_time = millis();
+
   while (inFile.available()) {
     size_t readLen = inFile.read(buffer, CHUNK_SIZE);
-    if (readLen < CHUNK_SIZE)
-      memset(buffer + readLen, 0, CHUNK_SIZE - readLen); // zero-padding
-
-    mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, CHUNK_SIZE, iv_copy, buffer, output);
-    outFile.write(output, CHUNK_SIZE);
+    mbedtls_chacha20_update(&chacha, readLen, buffer, output);
+    outFile.write(output, readLen);
   }
+
   unsigned long end_time = millis();
-  float total_time = ((float)(end_time - start_time)) / 1000.0;
-  Serial.printf("Encryption complete in %.4f seconds\n", total_time);
-  mbedtls_aes_free(&aes);
+  mbedtls_chacha20_free(&chacha);
   inFile.close();
   outFile.close();
 }
-
 
 void decrypt_file(fs::FS &fs, const char *inputPath, const char *outputPath) {
   File inFile = fs.open(inputPath, "r");
@@ -56,38 +53,37 @@ void decrypt_file(fs::FS &fs, const char *inputPath, const char *outputPath) {
     return;
   }
 
-  // Read original size (first 4 bytes)
   size_t originalSize = 0;
   inFile.read((uint8_t*)&originalSize, sizeof(originalSize));
 
-  mbedtls_aes_context aes;
-  mbedtls_aes_init(&aes);
-  mbedtls_aes_setkey_dec(&aes, key, KEY_SIZE * 8);
+  mbedtls_chacha20_context chacha;
+  mbedtls_chacha20_init(&chacha);
+  mbedtls_chacha20_setkey(&chacha, key);
+
+  uint8_t iv_copy[IV_SIZE];
+  memcpy(iv_copy, iv, IV_SIZE);
+  mbedtls_chacha20_starts(&chacha, iv_copy, 0); // counter = 0
 
   uint8_t buffer[CHUNK_SIZE];
   uint8_t output[CHUNK_SIZE];
-  uint8_t iv_copy[IV_SIZE];
-  memcpy(iv_copy, iv, IV_SIZE);
-
   size_t totalWritten = 0;
+
   unsigned long start_time = millis();
   while (inFile.available() && totalWritten < originalSize) {
     size_t readLen = inFile.read(buffer, CHUNK_SIZE);
-    if (readLen != CHUNK_SIZE) break;
+    mbedtls_chacha20_update(&chacha, readLen, buffer, output);
 
-    mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, CHUNK_SIZE, iv_copy, buffer, output);
-
-    size_t bytesToWrite = (originalSize - totalWritten) > CHUNK_SIZE ? CHUNK_SIZE : (originalSize - totalWritten);
-    outFile.write(output, bytesToWrite);
-    totalWritten += bytesToWrite;
+    size_t toWrite = (originalSize - totalWritten > readLen) ? readLen : (originalSize - totalWritten);
+    outFile.write(output, toWrite);
+    totalWritten += toWrite;
   }
+
   unsigned long end_time = millis();
-  float total_time = ((float)(end_time - start_time)) / 1000.0;
-  Serial.printf("Decryption complete in %.4f seconds\n", total_time);
-  mbedtls_aes_free(&aes);
+  mbedtls_chacha20_free(&chacha);
   inFile.close();
   outFile.close();
 }
+
 
 
 void decrypt_verify(String file){
